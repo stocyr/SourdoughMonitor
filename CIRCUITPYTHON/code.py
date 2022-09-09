@@ -1,3 +1,7 @@
-from utils.alarm import sound_alarm, buzzer_pin, short_pulses
+import board
+from busio import I2C
+from adafruit_tmf8821 import TMF8821
 
-sound_alarm(short_pulses, buzzer_pin, 10)
+i2c = I2C(board.SCL, board.SDA, frequency=125000)
+
+tof = TMF8821(i2c)
