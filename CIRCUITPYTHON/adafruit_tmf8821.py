@@ -34,13 +34,16 @@ Implementation Notes
 
 # imports
 
-__version__ = "0.0.0+auto.0"
-__repo__ = "https://github.com/stocyr/Adafruit_CircuitPython_TMF8821.git"
+__version__ = "1.0.0+auto.0"
 
 from micropython import const
+from collections import namedtuple
 
 from adafruit_bus_device import i2c_device
-from tof_image import _tof_image
+from adafruit_ticks import ticks_ms, ticks_add, ticks_less
+from tmf8821_image import _tof_image2
+from tmf8821_config import TMF882X_Configuration
+from time import sleep
 
 try:
     from typing import Optional, List
@@ -53,9 +56,9 @@ from busio import I2C
 # For any appid, any cid_rid – Registers always available
 _TMF882X_REG_APPID = const(0x00)  # appid
 _TMF882X_REG_MINOR = const(0x01)  # minor
-_TMF882X_REG_ENABLE = const(0xE0)  # 0 cpu_ready powerup_select pon
-_TMF882X_REG_INT_STATUS = const(0xE1)  # 0 int7 int6 0 int4 0 int2 0
-_TMF882X_REG_INT_ENAB = const(0xE2)  # 0 int7_enable int6_enable 0 int4_enable 0 int2_enable 0
+_TMF882X_REG_ENABLE = const(0xE0)  # cpu_ready, powerup_select, pon
+_TMF882X_REG_INT_STATUS = const(0xE1)  # int7, int6, int4, int2, writing 1 clears the flag
+_TMF882X_REG_INT_ENAB = const(0xE2)  # int7_enable, int6_enable, int4_enable, int2_enable
 _TMF882X_REG_ID = const(0xE3)  # Chip ID, reads 08h – do not rely on register bits 6 and 7 of this register.
 
 # If appid=0x03, any cid_rid, the following describe Main Application Register
@@ -102,6 +105,7 @@ _TMF882X_REG_SYS_TICK_3 = const(0x37)  # sys_tick[31:24]
 _TMF882X_REG_RES_CONFIDENCE_i = list(range(0x38, 0xA1 + 1, 3))  # confidence[i]
 _TMF882X_REG_RES_DISTANCE_i_LSB = list(range(0x39, 0xA2 + 1, 3))  # distance[i][7:0]
 _TMF882X_REG_RES_DISTANCE_i_MSB = list(range(0x3A, 0xA3 + 1, 3))  # distance[i][15:8]
+_TMF882X_MEASUREMENT_SIZE = const(132)
 
 # If appid=0x03, cid_rid=0x16, the following describe Configuration Page
 _TMF882X_REG_PERIOD_MS_LSB = const(0x24)  # period[7:0]
@@ -169,43 +173,57 @@ _TMF882X_DEFAULT_I2C_ADDR = const(0x41)
 
 _TMF882X_MODE_BOOTLOADER = const(0x80)
 _TMF882X_MODE_APP = const(0x03)
-_app_id_name = {_TMF882X_MODE_BOOTLOADER: 'BTL', _TMF882X_MODE_APP: 'APP'}
+_TMF882X_app_id_name = {_TMF882X_MODE_BOOTLOADER: 'BTL', _TMF882X_MODE_APP: 'APP'}
 
 _TMF882X_CHIP_ID = const(0x08)
 _TMF882X_CHIP_ID_VALID_MASK = const(0x3F)
 _TMF882X_ROM_V2 = const(0x29)
 
-_TMF882X_DOWNLOAD_INIT = const(0x14)
-_TMF882X_SET_ADDR = const(0x43)
-_TMF882X_W_RAM = const(0x41)
-_TMF882X_RAMREMAP_RESET = const(0x11)
-_TMF882X_STAT_OK = const(0x00)
-_TMF882X_STAT_ACCEPTED = const(0x01)
+_TMF882X_BL_DOWNLOAD_INIT = const(0x14)
+_TMF882X_BL_SET_ADDR = const(0x43)
+_TMF882X_BL_W_RAM = const(0x41)
+_TMF882X_BL_RAMREMAP_RESET = const(0x11)
 
-_TMF882X_FW_ADDR = const(0x20000000)  # Note, only the last 16 bit are respected
-_TMF882X_MAX_DATA = const(100)
+_TMF882X_BL_FW_ADDR = const(0x20000000)  # Note, only the last 16 bit are respected
+_TMF882X_BL_MAX_FW_DATA = const(100)  # Setting this to 128 leads to erroneous answers of the device
 
+_TMF882X_APP_CMD_MEASURE = const(0x10)
+_TMF882X_APP_CMD_CLEAR_STATUS = const(0x11)
+_TMF882X_APP_CMD_WRITE_CONFIG_PAGE = const(0x15)
+_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_COMMON = const(0x16)
+_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_SPAD_1 = const(0x17)
+_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_SPAD_2 = const(0x18)
+_TMF882X_APP_CMD_STOP = const(0xFF)
 
-# User-facing constants:
+_TMF882X_MEASUREMENT_RESULT = const(0x10)
+_TMF882X_CONFIG_COMMON_CID = const(0x16)
+_TMF882X_CONFIG_PAGE_SIZE = const(0x00BC)
+
+_TMF882X_CMD_STAT_OK = const(0x00)
+_TMF882X_CMD_STAT_ACCEPTED = const(0x01)
+
+Measurement = namedtuple('Measurement', 'result_number temperature number_valid_results ambient_light photon_count '
+                                        'reference_count sys_tick confidences distances')
 
 
 class TMF8821:
-    def __init__(self, i2c: I2C, address: int = _TMF882X_DEFAULT_I2C_ADDR) -> None:
+    def __init__(self, i2c: I2C, address: int = _TMF882X_DEFAULT_I2C_ADDR, verbose=False) -> None:
         self._device = i2c_device.I2CDevice(i2c, address)
-        self._sample_delay_ms = 0
+        self.config = TMF882X_Configuration()
 
         # Check if chip is responding and ID matches datasheet
         if self._read_byte(_TMF882X_REG_ID) & _TMF882X_CHIP_ID_VALID_MASK != _TMF882X_CHIP_ID:
-            raise Exception('TMF882X chip ID doesn''t match!')
+            raise Exception("TMF882X chip ID doesn't match!")
 
         # Power up the device
-        en_reg = self._read_byte(_TMF882X_REG_ENABLE)
-        # print(f'Enable register reads back as 0b{en_reg:08b}')
-        i_timeout = 0
-        while en_reg & 0x41 != 0x41:
-            print(f'Waiting for start up, enable register = 0b{en_reg:08b}')
-            print(f'lower nibble: 0b{en_reg & 0x0F:04b}')
+        timeout = ticks_add(ticks_ms(), 100)  # Wait for maximum 100ms
+        while ticks_less(ticks_ms(), timeout):
             # Wait for CPU to start up
+            en_reg = self._read_byte(_TMF882X_REG_ENABLE)
+
+            if en_reg & 0x41 == 0x41:
+                # CPU running and ready
+                break
             if en_reg & 0x0F == 0b0001:
                 # CPU is currently in the process of initializing HW and SW
                 continue
@@ -214,20 +232,20 @@ class TMF8821:
                 self._write_byte(_TMF882X_REG_ENABLE, en_reg | 0x01)  # set bit 0, leave the rest
             elif en_reg & 0x0F == 0b0110:
                 # Device is in STANDBY_TIMED mode and will wake up due to the measurement timer expires
-                # or the host can force the device to wake-up
-                self._write_byte(_TMF882X_REG_CMD_STAT, 0xFF)  # Send stop command to interrupt measurement and go IDLE
-            en_reg = self._read_byte(_TMF882X_REG_ENABLE)
-            i += 1
-            if i > 20:
-                raise Exception('Timeout while waiting for startup')
+                # or the host can force the device to wake-up:
+                # Send stop command to interrupt measurement and go idle
+                self._write_app_command(_TMF882X_APP_CMD_STOP)
+        else:
+            raise Exception('Timeout while waiting for startup')
 
         # CPU is ready to communicate. First ask about the state (bootloader / app)
         self.app_id = self._read_byte(_TMF882X_REG_APPID)
 
         # If the application is already running, skip firmware download
         if self.app_id == _TMF882X_MODE_APP:
-            minor, patch = self._read_bytes(_TMF882X_REG_MINOR, 2)
-            print(f'App v{minor}.{patch} running.')
+            if verbose:
+                minor, patch = self._read_bytes(_TMF882X_REG_MINOR, 2)
+                print(f'App v{minor}.{patch} running.')
             return
 
         # If bootloader is running, verify ROM v2
@@ -235,39 +253,47 @@ class TMF8821:
         if rom_version != _TMF882X_ROM_V2:
             raise Exception(f'TMF882X ROM version != 2! Register reads {rom_version:#0x}')
 
-        # Download firmware
-
         # Initiate firmware reception
-        self._write_command(_TMF882X_DOWNLOAD_INIT, bytes(b"\x29"))
-        self._wait_for_bl_ready()
+        self._write_bl_command(_TMF882X_BL_DOWNLOAD_INIT, bytes(b"\x29"))
+        self._check_bl_cmd_executed(verbose)
         # Set destination write address
-        self._write_command(_TMF882X_SET_ADDR, bytes([(_TMF882X_FW_ADDR >> 8) & 0xFF, _TMF882X_FW_ADDR & 0xFF]))
-        self._wait_for_bl_ready()
+        self._write_bl_command(_TMF882X_BL_SET_ADDR,
+                               bytes([(_TMF882X_BL_FW_ADDR >> 8) & 0xFF, _TMF882X_BL_FW_ADDR & 0xFF]))
+        self._check_bl_cmd_executed(verbose)
 
-        num_downloaded = 0
-        print('Downloading firmware: [', end='')
-        while num_downloaded < len(_tof_image):
-            chunk_bytes = min(_TMF882X_MAX_DATA, len(_tof_image) - num_downloaded)
-            data = _tof_image[num_downloaded:num_downloaded + chunk_bytes]
-            self._write_command(_TMF882X_W_RAM, data)
-            self._wait_for_bl_ready()
-            num_downloaded += chunk_bytes
-            print('=>\b', end='')
-        print('] Done.')
+        size_downloaded = 0
+        image = _tof_image2
+        if verbose:
+            print('Downloading firmware: ', end='')
+        while size_downloaded < len(image):
+            chunk_bytes = min(_TMF882X_BL_MAX_FW_DATA, len(image) - size_downloaded)
+            data = image[size_downloaded:size_downloaded + chunk_bytes]
+            self._write_bl_command(_TMF882X_BL_W_RAM, data)
+            self._check_bl_cmd_executed()
+            size_downloaded += chunk_bytes
+            if verbose:
+                print(f'{size_downloaded / len(image) * 100:3.0f}%\b\b\b\b', end='')
+        if verbose:
+            print('100% -- Done.')
 
         # Set powerup select to run from RAM
         self._write_byte(_TMF882X_REG_ENABLE, 0x21)  # set bit 0 (general enable) and bit 5 (run from RAM)
-        self._write_command(_TMF882X_RAMREMAP_RESET, bytes())  # Instruct device to run firmware
+        self._write_bl_command(_TMF882X_BL_RAMREMAP_RESET, bytes())  # Instruct device to run firmware
 
-        self.app_id = self._read_byte(_TMF882X_REG_APPID)
-        if self.app_id == _TMF882X_MODE_APP:
-            minor, patch = self._read_bytes(_TMF882X_REG_MINOR, 2)
-            print(f'App v{minor}.{patch} running.')
+        # Check if firmware launch was successful
+        timeout = ticks_add(ticks_ms(), 3)  # Wait for maximum 3ms
+        while ticks_less(ticks_ms(), timeout):
+            self.app_id = self._read_byte(_TMF882X_REG_APPID)
+            if self.app_id == _TMF882X_MODE_APP:
+                if verbose:
+                    minor, patch = self._read_bytes(_TMF882X_REG_MINOR, 2)
+                    print(f'App v{minor}.{patch} running.')
+                break
         else:
-            raise Exception('Device is still in bootloader mode after downloading firmware!')
+            raise Exception('Device is still in bootloader mode 3ms after running firmware!')
 
 
-    def _write_command(self, cmd: int, data: bytes, dryrun=False):
+    def _write_bl_command(self, cmd: int, data: bytes, dryrun=False):
         checksum = ((cmd + len(data) + sum(data)) & 0x000000FF) ^ 0xFF
         if dryrun:
             print(f'Writing command:', ' '.join(map(hex, bytes([cmd, len(data)]) + data + bytes([checksum]))))
@@ -275,17 +301,133 @@ class TMF8821:
             self._write_bytes(_TMF882X_REG_BL_CMD_STAT, bytes([cmd, len(data)]) + data + bytes([checksum]))
 
 
-    def _wait_for_bl_ready(self, verbose=False):
-        while True:
+    def _check_bl_cmd_executed(self, verbose=False):
+        timeout = ticks_add(ticks_ms(), 50)  # Wait for maximum 3ms
+        while ticks_less(ticks_ms(), timeout):
             status = self._read_bytes(_TMF882X_REG_BL_CMD_STAT, 3)
             if verbose:
                 print(f'Checking status:', " ".join(map(hex, status)))
-            if status[0] == _TMF882X_STAT_OK:
+            if status[0] == _TMF882X_CMD_STAT_OK:
                 break
-            if status[0] == _TMF882X_STAT_ACCEPTED:
+            elif status[0] == _TMF882X_CMD_STAT_ACCEPTED:
                 continue
             else:
                 raise Exception(f'TMF882X returned erroneous status {" ".join(map(hex, status))}!')
+        else:
+            raise Exception('Device took too long to respond with status OK!')
+
+
+    def _write_app_command(self, cmd: int):
+        self._write_byte(_TMF882X_REG_CMD_STAT, cmd)
+
+
+    def _check_app_cmd_executed(self, allow_accept=False, verbose=False, timeout_ms=10):
+        timeout = ticks_add(ticks_ms(), timeout_ms)  # Wait for maximum <timeout> ms
+        while ticks_less(ticks_ms(), timeout):
+            status = self._read_byte(_TMF882X_REG_CMD_STAT)
+            if verbose:
+                print(f'Checking status: {status:#02x}')
+            if status == _TMF882X_CMD_STAT_OK:
+                break
+            elif status == _TMF882X_CMD_STAT_ACCEPTED:
+                if allow_accept:
+                    break
+                else:
+                    continue
+            elif status == _TMF882X_CMD_STAT_ACCEPTED or status >= 0x10:
+                continue
+            else:
+                raise Exception(f'TMF882X returned erroneous status {status:#02x}!')
+        else:
+            raise Exception(f'Device took longer than {timeout_ms}ms to respond with status OK!')
+
+
+    def write_configuration(self):
+        self._write_app_command(_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_COMMON)
+        self._check_app_cmd_executed()
+        config_result, tid, *size = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, 4)
+        size = size[0] + (size[1] << 8)
+        if not (config_result == _TMF882X_CONFIG_COMMON_CID and size == _TMF882X_CONFIG_PAGE_SIZE):
+            raise Exception('Error loading configuration page')
+        data = self.config.pack_to_data()
+        self._write_bytes(_TMF882X_REG_PERIOD_MS_LSB, data)
+        self._write_app_command(_TMF882X_APP_CMD_WRITE_CONFIG_PAGE)
+        self._check_app_cmd_executed()
+
+
+    def single_measurement(self, timeout_ms, sleep_ratio=None):
+        self.start_measurements()
+        measurement = self.wait_for_measurement(sleep_ratio, timeout_ms)
+        # Disable any further measurements
+        self.stop_measurements()
+        return measurement
+
+
+    def wait_for_measurement(self, timeout_ms, sleep_ratio=None):
+        timeout = ticks_add(ticks_ms(), timeout_ms)  # Wait for maximum <timeout_ms> ms
+        while ticks_less(ticks_ms(), timeout):
+            interrupts = self._read_byte(_TMF882X_REG_INT_STATUS)
+            # Query measurement ready interrupt flag
+            if interrupts & 0x02:
+                # Measurement ready flag has been raised
+                break
+            if sleep_ratio:
+                sleep(timeout_ms / sleep_ratio)
+        else:
+            raise Exception(f'Measurement took longer than {timeout_ms}ms!')
+        # Clear interrupt flag
+        self._write_byte(_TMF882X_REG_INT_STATUS, 0x00)
+        # Read measurement block
+        raw_data = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, _TMF882X_MEASUREMENT_SIZE)
+        if not self._read_byte(_TMF882X_REG_MEASURE_STATUS) == 0x00:
+            raise Exception('Measurement state machine failure!')
+        return self.parse_measurement_data(raw_data)
+
+
+    def start_measurements(self):
+        self._write_byte(_TMF882X_REG_INT_ENAB, 0x02)  # Enable interrupt only for measurement result ready
+        self._write_byte(_TMF882X_REG_INT_STATUS, 0xFF)  # Clear any old pending interrupt flags
+        self._write_app_command(_TMF882X_APP_CMD_MEASURE)  # Start measurements
+        self._check_app_cmd_executed(allow_accept=True)
+
+
+    def parse_measurement_data(self, raw_data):
+        offset = _TMF882X_REG_CONFIG_RESULT
+        if raw_data[_TMF882X_REG_CONFIG_RESULT - offset] != _TMF882X_MEASUREMENT_RESULT:
+            raise Exception("Data doesn't contain a measurement!")
+        # Fill measurement data into accessible structure
+        confidences = [raw_data[i - offset] for i in _TMF882X_REG_RES_CONFIDENCE_i]
+        distances = [raw_data[i - offset] + (raw_data[i + 1 - offset] << 8) for i in _TMF882X_REG_RES_DISTANCE_i_LSB]
+        if self.config.spad_map[:3] == '3x3':
+            confidences = confidences[:3 * 3]
+            distances = distances[:3 * 3]
+        elif self.config.spad_map[:3] == '4x4':
+            confidences = confidences[:8] + confidences[9:17]
+            distances = distances[:8] + distances[9:17]
+        elif self.config.spad_map[:3] == '3x6':
+            confidences = confidences[:3 * 6]
+            distances = distances[:3 * 6]
+        measurement = Measurement(
+            result_number=raw_data[_TMF882X_REG_RESULT_NUMBER - offset],
+            temperature=raw_data[_TMF882X_REG_TEMPERATURE - offset],
+            number_valid_results=raw_data[_TMF882X_REG_NUMBER_VALID_RESULTS - offset],
+            ambient_light=int.from_bytes(raw_data[_TMF882X_REG_AMBIENT_LIGHT_0 - offset:
+                                                  _TMF882X_REG_AMBIENT_LIGHT_3 - offset + 1], 'little'),
+            photon_count=int.from_bytes(raw_data[_TMF882X_REG_PHOTON_COUNT_0 - offset:
+                                                 _TMF882X_REG_PHOTON_COUNT_3 - offset + 1], 'little'),
+            reference_count=int.from_bytes(raw_data[_TMF882X_REG_REFERENCE_COUNT_0 - offset:
+                                                    _TMF882X_REG_REFERENCE_COUNT_3 - offset + 1], 'little'),
+            sys_tick=int.from_bytes(raw_data[_TMF882X_REG_SYS_TICK_0 - offset:
+                                             _TMF882X_REG_SYS_TICK_3 - offset + 1], 'little'),
+            confidences=confidences,
+            distances=distances,
+        )
+        return measurement
+
+
+    def stop_measurements(self):
+        self._write_app_command(_TMF882X_APP_CMD_STOP)
+        self._check_app_cmd_executed(timeout_ms=2)
 
 
     @property

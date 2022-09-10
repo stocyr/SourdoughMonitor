@@ -66,6 +66,8 @@ completion):
 - `adafruit-circuitpython-ssd1327` for
   SSD1327. [Example](https://github.com/adafruit/Adafruit_CircuitPython_SSD1327/blob/main/examples/ssd1327_simpletest.py)
 - `adafruit-circuitpython-simpleio` for PWM
+- `adafruit-circuitpython-ticks` for time measurements in TMF882X driver
+- `adafruit-circuitpython-typing` for datatype description in TMF882X driver
 
 Libraries
 ---------
@@ -78,6 +80,7 @@ from [here](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/t
 - `adafruit_display_text/` folder
 - `simpleio.mpy` (for PWM on the buzzer pin)
 - `neopixel.mpy`
+- `adafruit_ticks.mpy` (for millisecond time measurement)
 
 Usage
 -----
