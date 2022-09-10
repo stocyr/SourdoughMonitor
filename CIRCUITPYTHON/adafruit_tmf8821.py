@@ -321,7 +321,7 @@ class TMF8821:
         self._write_byte(_TMF882X_REG_CMD_STAT, cmd)
 
 
-    def _check_app_cmd_executed(self, allow_accept=False, verbose=False, timeout_ms=10):
+    def _check_app_cmd_executed(self, allow_accept=False, verbose=False, timeout_ms=10, ignore=[]):
         timeout = ticks_add(ticks_ms(), timeout_ms)  # Wait for maximum <timeout> ms
         while ticks_less(ticks_ms(), timeout):
             status = self._read_byte(_TMF882X_REG_CMD_STAT)
@@ -336,8 +336,11 @@ class TMF8821:
                     continue
             elif status == _TMF882X_CMD_STAT_ACCEPTED or status >= 0x10:
                 continue
+            elif status in ignore:
+                break
             else:
-                raise Exception(f'TMF882X returned erroneous status {status:#02x}!')
+                stat = self._read_byte(_TMF882X_REG_APPLICATION_STATUS)
+                raise Exception(f'TMF882X returned erroneous status {status:#02x}, app status: 0b{stat:08b}!')
         else:
             raise Exception(f'Device took longer than {timeout_ms}ms to respond with status OK!')
 
@@ -352,36 +355,7 @@ class TMF8821:
         data = self.config.pack_to_data()
         self._write_bytes(_TMF882X_REG_PERIOD_MS_LSB, data)
         self._write_app_command(_TMF882X_APP_CMD_WRITE_CONFIG_PAGE)
-        self._check_app_cmd_executed()
-
-
-    def single_measurement(self, timeout_ms, sleep_ratio=None):
-        self.start_measurements()
-        measurement = self.wait_for_measurement(sleep_ratio, timeout_ms)
-        # Disable any further measurements
-        self.stop_measurements()
-        return measurement
-
-
-    def wait_for_measurement(self, timeout_ms, sleep_ratio=None):
-        timeout = ticks_add(ticks_ms(), timeout_ms)  # Wait for maximum <timeout_ms> ms
-        while ticks_less(ticks_ms(), timeout):
-            interrupts = self._read_byte(_TMF882X_REG_INT_STATUS)
-            # Query measurement ready interrupt flag
-            if interrupts & 0x02:
-                # Measurement ready flag has been raised
-                break
-            if sleep_ratio:
-                sleep(timeout_ms / sleep_ratio)
-        else:
-            raise Exception(f'Measurement took longer than {timeout_ms}ms!')
-        # Clear interrupt flag
-        self._write_byte(_TMF882X_REG_INT_STATUS, 0x00)
-        # Read measurement block
-        raw_data = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, _TMF882X_MEASUREMENT_SIZE)
-        if not self._read_byte(_TMF882X_REG_MEASURE_STATUS) == 0x00:
-            raise Exception('Measurement state machine failure!')
-        return self.parse_measurement_data(raw_data)
+        self._check_app_cmd_executed(ignore=[0x03])
 
 
     def start_measurements(self):
@@ -389,6 +363,11 @@ class TMF8821:
         self._write_byte(_TMF882X_REG_INT_STATUS, 0xFF)  # Clear any old pending interrupt flags
         self._write_app_command(_TMF882X_APP_CMD_MEASURE)  # Start measurements
         self._check_app_cmd_executed(allow_accept=True)
+
+
+    def stop_measurements(self):
+        self._write_app_command(_TMF882X_APP_CMD_STOP)
+        self._check_app_cmd_executed(timeout_ms=2)
 
 
     def parse_measurement_data(self, raw_data):
@@ -425,9 +404,33 @@ class TMF8821:
         return measurement
 
 
-    def stop_measurements(self):
-        self._write_app_command(_TMF882X_APP_CMD_STOP)
-        self._check_app_cmd_executed(timeout_ms=2)
+    def wait_for_measurement(self, timeout_ms, sleep_ratio=None) -> Measurement:
+        timeout = ticks_add(ticks_ms(), timeout_ms)  # Wait for maximum <timeout_ms> ms
+        while ticks_less(ticks_ms(), timeout):
+            interrupts = self._read_byte(_TMF882X_REG_INT_STATUS)
+            # Query measurement ready interrupt flag
+            if interrupts & 0x02:
+                # Measurement ready flag has been raised
+                break
+            if sleep_ratio:
+                sleep(timeout_ms / sleep_ratio)
+        else:
+            raise Exception(f'Measurement took longer than {timeout_ms}ms!')
+        # Clear interrupt flag by writing a '1' on the corresponding position
+        self._write_byte(_TMF882X_REG_INT_STATUS, 0x02)
+        # Read measurement block
+        raw_data = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, _TMF882X_MEASUREMENT_SIZE)
+        if not self._read_byte(_TMF882X_REG_MEASURE_STATUS) == 0x00:
+            raise Exception('Measurement state machine failure!')
+        return self.parse_measurement_data(raw_data)
+
+
+    def single_measurement(self, timeout_ms, sleep_ratio=None) -> Measurement:
+        self.start_measurements()
+        measurement = self.wait_for_measurement(timeout_ms, sleep_ratio)
+        # Disable any further measurements
+        self.stop_measurements()
+        return measurement
 
 
     @property
