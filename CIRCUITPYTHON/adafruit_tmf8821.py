@@ -36,14 +36,15 @@ Implementation Notes
 
 __version__ = "1.0.0+auto.0"
 
-from micropython import const
 from collections import namedtuple
+from time import sleep
 
 from adafruit_bus_device import i2c_device
 from adafruit_ticks import ticks_ms, ticks_add, ticks_less
-from tmf8821_image import _tof_image2
+from micropython import const
+
 from tmf8821_config import TMF882X_Configuration
-from time import sleep
+from tmf8821_image import _tof_image2
 
 try:
     from typing import Optional, List
