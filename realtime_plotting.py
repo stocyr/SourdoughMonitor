@@ -1,19 +1,27 @@
+# Largely copied from: https://thepoorengineer.com/en/arduino-python-plot/
+
 import collections
+import re
 import time
 from threading import Thread
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
+import numpy as np
 import serial
 
 
-class serialPlot:
-    def __init__(self, serialPort='COM4', serialBaud=115200, plotLength=100):
-        self.port = serialPort
-        self.baud = serialBaud
-        self.plotMaxLength = plotLength
+def calibration(val):
+    return val + 0
+
+
+class SerialPlot:
+    def __init__(self, serial_port_name='COM4', serial_baud=115200, history_length=100):
+        self.port = serial_port_name
+        self.baud = serial_baud
+        self.plotMaxLength = history_length
         self.line = ''
-        self.data = collections.deque([0.0] * plotLength, maxlen=plotLength)
+        self.line_data = collections.deque([np.nan] * history_length, maxlen=history_length)
         self.isRun = True
         self.isReceiving = False
         self.thread = None
@@ -21,46 +29,75 @@ class serialPlot:
         self.previousTimer = 0
         # self.csvData = []
 
-        print('Trying to connect to: ' + str(serialPort) + ' at ' + str(serialBaud) + ' BAUD.')
+        print('Trying to connect to: ' + str(serial_port_name) + ' at ' + str(serial_baud) + ' BAUD.')
         try:
-            self.serialConnection = serial.Serial(serialPort, serialBaud, timeout=4)
-            print('Connected to ' + str(serialPort) + ' at ' + str(serialBaud) + ' BAUD.')
-        except:
-            print("Failed to connect with " + str(serialPort) + ' at ' + str(serialBaud) + ' BAUD.')
+            self.serialConnection = serial.Serial(serial_port_name, serial_baud, timeout=4)
+            print('Connected to ' + str(serial_port_name) + ' at ' + str(serial_baud) + ' BAUD.')
+        except Exception:
+            print("Failed to connect with " + str(serial_port_name) + ' at ' + str(serial_baud) + ' BAUD.')
 
 
-    def readSerialStart(self):
-        if self.thread == None:
-            self.thread = Thread(target=self.backgroundThread)
+    def read_serial_start(self):
+        if self.thread is None:
+            self.thread = Thread(target=self.background_thread)
             self.thread.start()
             # Block till we start receiving values
-            while self.isReceiving != True:
-                time.sleep(0.1)
+            while not self.isReceiving:
+                time.sleep(0.01)
 
 
-    def getSerialData(self, frame, lines, lineValueText, lineLabel, timeText):
-        currentTimer = time.perf_counter()
-        self.plotTimer = int((currentTimer - self.previousTimer) * 1000)  # the first reading will be erroneous
-        self.previousTimer = currentTimer
-        timeText.set_text('Plot Interval = ' + str(self.plotTimer) + 'ms')
+    def get_serial_data(self, frame, lines, line_value_text, ax_bars, xpos, ypos, widths, bottom, bars, cm, time_text):
+        beginning_match = re.findall(r'(\d)x(\d)', self.line)
+        if beginning_match is None:
+            # Filter out startup text on serial port
+            return
+
+        # Timing plotting
+        current_timer = time.perf_counter()
+        self.plotTimer = int((current_timer - self.previousTimer) * 1000)  # the first reading will be erroneous
+        self.previousTimer = current_timer
+        time_text.set_text('Plot Interval = ' + str(self.plotTimer) + 'ms')
+
+        # Data parsing
+        packets = self.line.split(' ')[1:]
+        grid_x, grid_y = map(int, beginning_match[0])
         try:
-            values = [int(distance[:-2]) for distance in self.line.split(' ')[:9]]
-            value = sum(values) / len(values)
+            num_data = grid_x * grid_y
+            distances = np.array(list(map(int, packets[:num_data])), dtype=float).reshape((grid_y, grid_x))
+            confidences = np.array(list(map(int, packets[num_data:2 * num_data])), dtype=float).reshape(
+                (grid_y, grid_x))
+            distances[confidences < 20] = np.nan
         except ValueError:
-            value = 0.0
-        self.data.append(value)  # we get the latest data point and append it to our array
-        lines.set_data(range(self.plotMaxLength), self.data)
-        lineValueText.set_text(f'{lineLabel} = {value:.0f}mm')
+            distances = np.ones((grid_y, grid_x)) * np.nan
+            confidences = np.zeros((grid_y, grid_x))
+
+        # Apply calibration
+        distances = calibration(distances)
+
+        # Update line plot
+        neg_distance = -np.nanmean(distances)
+        self.line_data.append(neg_distance)
+        lines.set_data(range(self.plotMaxLength), self.line_data)
+        line_value_text.set_text(f'Avg distance: {neg_distance:.1f}mm')
+
+        # Update 3d bar plot
+        # print(distances)
+        heights = (- np.ravel(distances)) - bottom
+        np.clip(heights, 0, None)
+        intensities = np.ravel(confidences) / 255
+        bars[0].remove()
+        bars[0] = ax_bars.bar3d(xpos, ypos, bottom, widths, widths, heights, color=cm(intensities))
+
         # self.csvData.append(self.data[-1])
 
 
-    def backgroundThread(self):  # retrieve data
-        time.sleep(1.0)  # give some buffer time for retrieving data
+    def background_thread(self):  # retrieve data
+        time.sleep(0.1)  # give some buffer time for retrieving data
         self.serialConnection.reset_input_buffer()
-        while (self.isRun):
+        while self.isRun:
             self.line = self.serialConnection.readline().decode("utf-8")
             self.isReceiving = True
-            print(self.line)
+            # print(self.line)
 
 
     def close(self):
@@ -69,36 +106,60 @@ class serialPlot:
         self.serialConnection.close()
         print('Disconnected...')
         # df = pd.DataFrame(self.csvData)
-        # df.to_csv('/home/rikisenia/Desktop/data.csv')
+        # df.to_csv('.../data.csv')
 
 
 def main():
-    portName = 'COM4'
-    baudRate = 115200
-    maxPlotLength = 100
-    s = serialPlot(portName, baudRate, maxPlotLength)  # initializes all required variables
-    s.readSerialStart()  # starts background thread
+    port_name = 'COM4'
+    baud_rate = 115200
+    max_plot_history_length = 100
+    plt_interval = 100  # ms
 
-    # plotting starts below
-    pltInterval = 100  # Period at which the plot animation updates [ms]
+    s = SerialPlot(port_name, baud_rate, max_plot_history_length)  # initializes all required variables
+    s.read_serial_start()  # starts background thread
+
+    # Parse first packet here to figure out the SPAD pattern
+    while True:
+        beginning_match = re.findall(r'(\d)x(\d)', s.line)
+        if beginning_match:
+            break
+        time.sleep(0.1)
+    grid_x, grid_y = map(int, beginning_match[0])
+
+    # Set up plotting
     xmin = 0
-    xmax = maxPlotLength
-    ymin = 0
-    ymax = 1000
-    fig = plt.figure()
-    ax = plt.axes(xlim=(xmin, xmax), ylim=(float(ymin - (ymax - ymin) / 10), float(ymax + (ymax - ymin) / 10)))
-    ax.set_title('Real time Display')
-    ax.set_xlabel("time")
-    ax.set_ylabel("Distance [mm]")
+    xmax = max_plot_history_length
+    ymin = -300
+    ymax = 0
+    fig = plt.figure(figsize=(10, 5))
 
-    lineLabel = 'Distance'
-    timeText = ax.text(0.50, 0.95, '', transform=ax.transAxes)
-    lines = ax.plot([], [], '.-', label=lineLabel)[0]
-    lineValueText = ax.text(0.50, 0.90, '', transform=ax.transAxes)
-    anim = animation.FuncAnimation(fig, s.getSerialData, fargs=(lines, lineValueText, lineLabel, timeText),
-                                   interval=pltInterval)  # fargs has to be a tuple
+    ax_line = fig.add_subplot(121)
+    ax_line.set_xlim(xmin, xmax)
+    ax_line.set_ylim(float(ymin - (ymax - ymin) / 10), float(ymax + (ymax - ymin) / 10))
+    ax_line.set_title('Average distance')
+    ax_line.set_xlabel("Time")
+    ax_line.set_ylabel("Distance [mm]")
+    time_text = ax_line.text(0.50, 0.95, '', transform=ax_line.transAxes)
 
-    plt.legend(loc="upper left")
+    ax_bars = fig.add_subplot(122, projection='3d')
+    ax_bars.set_zlim(float(ymin - (ymax - ymin) / 10), float(ymax + (ymax - ymin) / 10))
+    ax_bars.set_title('Individual distances')
+    ax_bars.set_xlabel('X axis')
+    ax_bars.set_ylabel('Y axis')
+    _xx, _yy = np.meshgrid(np.arange(grid_x), np.arange(grid_y))
+    xpos, ypos = _xx.ravel(), _yy.ravel()
+    widths = [0.7] * len(xpos)
+    bottom = np.ones_like(xpos) * ymin
+    heights = np.zeros_like(xpos)
+    cm = plt.colormaps['Blues']
+    bars = [ax_bars.bar3d(xpos, ypos, bottom, widths, widths, heights, color=cm(1.0), alpha=0.8)]
+    ax_bars.set_ylim(ax_bars.get_ylim()[::-1])
+
+    lines = ax_line.plot([], [], '.-', label='Avg distance')[0]
+    line_value_text = ax_line.text(0.50, 0.90, '', transform=ax_line.transAxes)
+    anim = animation.FuncAnimation(fig, s.get_serial_data, fargs=(lines, line_value_text, ax_bars, xpos, ypos, widths,
+                                                                  bottom, bars, cm, time_text),
+                                   interval=plt_interval, blit=False)
     plt.show()
 
     s.close()
