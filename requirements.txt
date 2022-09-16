@@ -1,6 +1,10 @@
 Adafruit-Blinka==8.2.0
+adafruit-circuitpython-am2320==1.2.16
+adafruit-circuitpython-bme280==2.6.16
 adafruit-circuitpython-busdevice==5.2.3
 adafruit-circuitpython-il0373==1.3.16
+adafruit-circuitpython-lc709203f==2.2.7
+adafruit-circuitpython-register==1.9.14
 adafruit-circuitpython-requests==1.12.8
 adafruit-circuitpython-simpleio==3.0.8
 adafruit-circuitpython-ssd1327==1.3.9

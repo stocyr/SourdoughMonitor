@@ -21,8 +21,6 @@ We see the following devices connected:
 - `0x77`: BME280
 - `0x3c`: Zio ILED
 
-We couldn't get the _AM2320_ to connect, the uC resetted upon i2c bus scanning --> wrong pin polarisation?
-
 To initialize the OLED display and show the REPL output as well as our own prints, run:
 
 ```python
@@ -82,4 +80,32 @@ with open("/sketch.bmp", "rb") as f:
     display.refresh()
     print("refreshed")
     time.sleep(120)
+```
+
+## 16.09.2022 -- *Peripheral Tests*
+
+AM2320 answers correctly, but the example is wrong: reading consecutively with no sleep time in between doesn't work.
+Thus, wait > 100ms between reading (even temperature --> humidity):
+
+```python
+import time
+import board
+from busio import I2C
+import adafruit_am2320
+
+# create the I2C shared bus
+i2c = I2C(board.SCL, board.SDA, frequency=125000)
+am = adafruit_am2320.AM2320(i2c)
+
+delay = 0.1
+
+while True:
+    # Note: reading from the sensor within intervals of > 10Hz is not supported:
+    # It goes to sleep mode and doesn't wake up on time. Thus, wait at least 100ms
+    # before performing another reading. The sensor itself doesn't update the internal
+    # measurement register more frequently than every 2s anyway.
+    print("Temperature: ", am.temperature)
+    time.sleep(delay)
+    print("Humidity: ", am.relative_humidity)
+    time.sleep(delay)
 ```
