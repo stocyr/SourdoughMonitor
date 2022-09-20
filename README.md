@@ -68,6 +68,7 @@ completion):
 - `adafruit-circuitpython-simpleio` for PWM
 - `adafruit-circuitpython-ticks` for time measurements in TMF882X driver
 - `adafruit-circuitpython-typing` for datatype description in TMF882X driver
+- `circuitpython-displayio-cartesian` for plotting on the display
 
 Libraries
 ---------
@@ -85,4 +86,8 @@ from [here](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/t
 Usage
 -----
 
-bla bla
+
+Further reading
+---------------
+
+https://github.com/todbot/circuitpython-tricks
