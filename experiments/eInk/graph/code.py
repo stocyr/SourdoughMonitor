@@ -4,14 +4,27 @@ import board
 import displayio
 import terminalio
 import time
+import busio
 from adafruit_displayio_layout.widgets.cartesian import Cartesian
 from adafruit_bitmap_font import bitmap_font
 import bitmaptools
-import adafruit_ssd1327
 
+import adafruit_il0373
 
-display: adafruit_ssd1327.SSD1327 = full_width_display()
+displayio.release_displays()
 
+# This pinout works on a Feather M4 and may need to be altered for other boards.
+spi = busio.SPI(board.SCK, board.MOSI)  # Uses SCK and MOSI
+epd_cs = board.D9
+epd_dc = board.D10
+
+display_bus = displayio.FourWire(
+    spi, command=epd_dc, chip_select=epd_cs, baudrate=1000000
+)
+time.sleep(1)
+
+display = adafruit_il0373.IL0373(display_bus, width=296, height=128, rotation=270, black_bits_inverted=False,
+                                 color_bits_inverted=False, grayscale=True, refresh_time=1, border=None)
 
 # Fonts used for the Dial tick labels
 tick_font = bitmap_font.load_font("00Starmap-11-11.bdf")
@@ -34,15 +47,15 @@ my_group.append(bg_sprite)
 
 
 my_plane = Cartesian(
-    x=25,  # x position for the plane
-    y=2,  # y plane position
-    width=display.width - 30,  # display width
-    height=display.height - 30,  # display height
+    x=18,  # x position for the plane
+    y=15,  # y plane position
+    width=display.width - 50,  # display width
+    height=display.height - 40,  # display height
     xrange=(0, 6),  # x range
     yrange=(0, 6),  # y range
     subticks=True,
     axes_color=DARK,
-    font_color=BRIGHT,
+    font_color=DARK,
     pointer_color=BLACK,
     tick_color=BRIGHT,
     tick_label_font=tick_font,
@@ -84,7 +97,6 @@ def my_plot_line(cls, x: int, y: int) -> None:
 
 
 my_group.append(my_plane)
-
 
 data = [
     # (0, 0),  # we do this point manually - so we have no wait...
