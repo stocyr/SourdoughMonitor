@@ -20,7 +20,7 @@ display = adafruit_il0373.IL0373(display_bus, width=296, height=128, rotation=27
                                  color_bits_inverted=False, grayscale=True, refresh_time=1, border=None)
 g = displayio.Group()
 
-with open("/sketch.bmp", "rb") as f:
+with open("sketch.bmp", "rb") as f:
     pic = displayio.OnDiskBitmap(f)
     t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
     g.append(t)

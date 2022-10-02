@@ -5,10 +5,13 @@ import supervisor
 import adafruit_ssd1327
 
 
-def full_width_display():
+def full_width_display(fast: bool = False) -> adafruit_ssd1327.SSD1327:
     displayio.release_displays()
 
-    i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
+    if fast:
+        i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
+    else:
+        i2c = board.I2C()
     display_bus = displayio.I2CDisplay(i2c, device_address=0x3C)
     display = adafruit_ssd1327.SSD1327(display_bus, width=128, height=128)
 

@@ -109,3 +109,29 @@ while True:
     print("Humidity: ", am.relative_humidity)
     time.sleep(delay)
 ```
+
+## 02.10.2022 -- *BME280*
+
+```python
+"""
+BME280
+"""
+import time
+import board
+import adafruit_bme280.advanced as adafruit_bme280
+
+i2c = board.I2C()
+bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+
+bme280.mode = adafruit_bme280.MODE_FORCE
+bme280.iir_filter = adafruit_bme280.IIR_FILTER_DISABLE
+bme280.overscan_temperature = adafruit_bme280.OVERSCAN_X16
+
+while True:
+    print(f'Temperature: {bme280.temperature:.2f}°')
+    time.sleep(0.5)
+```
+
+
+We also found out we have the [revision C board](https://learn.adafruit.com/assets/109937),
+since the open-state value of I2C_POWER is *low*

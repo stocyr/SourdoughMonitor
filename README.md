@@ -21,7 +21,7 @@ Attached to it are the following devices:
   , [Button Pinout](https://cdn-learn.adafruit.com/assets/assets/000/104/602/original/eink___epaper_Pinouts_FeatherWing_Buttons.jpg?1631640413)
   , [FeatherWing Pinout](https://cdn-learn.adafruit.com/assets/assets/000/104/601/original/eink___epaper_Pinouts_2.9.jpg?1631640290)
 - **BME280** on-board temperature, humidity, pressure and altitude sensor on i2c address `0x77`
-  . [Manual](https://ae-bst.resource.bosch.com/media/_tech/media/datasheets/BST-BME280-DS002.pdf)
+  . [Manual](https://cdn.shopify.com/s/files/1/0174/1800/files/bst-bme280-ds002.pdf?v=1662743150)
   , [Product](https://shop.pimoroni.com/products/bme280-breakout?variant=29420960677971)
 - **AM2320** external temperature and humidity sensor on i2c address `0x5c`
   . [Datasheet](https://akizukidenshi.com/download/ds/aosong/AM2320.pdf)
@@ -36,7 +36,8 @@ Attached to it are the following devices:
   , [Product](https://learn.adafruit.com/adafruit-esp32-s2-tft-feather/i2c-on-board-sensor)
 
 For the other on-board peripheries, the
-guide [here](https://learn.adafruit.com/adafruit-esp32-s2-feather/circuitpython-essentials) provides tutorials.
+guide [here](https://learn.adafruit.com/adafruit-esp32-s2-feather/circuitpython-essentials) provides tutorials. Also,
+the schematic can be downloaded [here](https://learn.adafruit.com/assets/109937)
 
 ### Programming Language
 
