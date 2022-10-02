@@ -68,6 +68,8 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     my_group.append(bg_sprite)
 
     # Large text field
+    # Need to read twice: https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/f-a-q#faq-2958150
+    dummy_read = bme280.temperature
     temperature_text = f'{bme280.temperature:.2f}°'
     font_large = bitmap_font.load_font("SegoeUI_semibold-105.bdf")
     text_area_large = label.Label(font_large, text=temperature_text, color=BLACK)
