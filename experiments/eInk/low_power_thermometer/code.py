@@ -51,6 +51,7 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     bme280.mode = adafruit_bme280.MODE_FORCE
     bme280.iir_filter = adafruit_bme280.IIR_FILTER_DISABLE
     bme280.overscan_temperature = adafruit_bme280.OVERSCAN_X16
+    bme280.overscan_humidity = adafruit_bme280.OVERSCAN_X4
 
     # Set up display stuff
     my_group = displayio.Group()
@@ -67,9 +68,18 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     bg_sprite = displayio.TileGrid(bg_bitmap, pixel_shader=single_color_palette, x=0, y=0)
     my_group.append(bg_sprite)
 
-    # Large text field
     # Need to read twice: https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/f-a-q#faq-2958150
     dummy_read = bme280.temperature
+
+    # Small text field above
+    humidity_text = f'Humidity: {bme280.humidity:0.1f}%'
+    font_small = terminalio.FONT
+    text_area_small = label.Label(font_small, text=humidity_text, color=BLACK)
+    text_area_small.x = display.width // 2 - 60
+    text_area_small.y = 10
+    my_group.append(text_area_small)
+
+    # Large text field
     temperature_text = f'{bme280.temperature:.2f}°'
     font_large = bitmap_font.load_font("SegoeUI_semibold-105.bdf")
     text_area_large = label.Label(font_large, text=temperature_text, color=BLACK)
@@ -77,7 +87,7 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     text_area_large.y = display.height // 2 - 5
     my_group.append(text_area_large)
 
-    # Small text field
+    # Small text field below
     per, vol = battery_monitor.cell_percent, battery_monitor.cell_voltage
     monitoring_text = f'Battery: {per:.0f}% ({vol:.2f}V)'
     font_small = terminalio.FONT

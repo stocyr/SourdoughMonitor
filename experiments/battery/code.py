@@ -32,9 +32,9 @@ battery_monitor = LC709203F(board.I2C())
 
 print(f'A0 state: {switch.value}')
 if switch.value:
-    print('uC R/O')
+    print('uC is read only!')
 else:
-    print('uC W!')
+    print('uC write enabled!')
 
 t_start = time.time()
 try:
@@ -43,26 +43,31 @@ try:
             seconds = time.time() - t_start
             print(f'{seconds // 3600}h {(seconds % 3600) // 60}m {seconds % 60}s: ', end='')
             battery_monitor.pack_size = PackSize.MAH1000
+            battery_monitor.init_RSOC()
             per1000, vol = battery_monitor.cell_percent, battery_monitor.cell_voltage
-            print(f'{vol:.2f}V')
+            print(f'{vol:.3f}V')
             print(f'{per1000:.1f}%,', end='')
+
             override_packsize(battery_monitor, 1200)
+            battery_monitor.init_RSOC()
             per1200, vol = battery_monitor.cell_percent, battery_monitor.cell_voltage
             print(f'{per1200:.1f}%,', end='')
+
             battery_monitor.pack_size = PackSize.MAH2000
+            battery_monitor.init_RSOC()
             per2000, vol = battery_monitor.cell_percent, battery_monitor.cell_voltage
             print(f'{per2000:.1f}%')
 
-            fp.write(f'{time.time() - t_start},{vol:.2f},{per1000:.2f},{per1200:.2f},{per2000:.2f}\n')
+            fp.write(f'{time.time() - t_start},{vol:.3f},{per1000:.1f},{per1200:.1f},{per2000:.1f}\n')
             fp.flush()
             led.value = not led.value
             time.sleep(20)
 except OSError as e:  # Typically when the filesystem isn't writeable...
     if e.args[0] == 28:  # If the file system is full...
-        print('File system full!')
+        print('ERROR:\nFile system full!')
         delay = 0.1  # ...blink the LED faster!
     else:
-        print('Write protected')
+        print('ERROR:\nWrite protected')
         delay = 0.25  # ...blink the LED every half second.
     while True:
         led.value = not led.value

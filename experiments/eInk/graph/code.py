@@ -8,6 +8,7 @@ import busio
 from adafruit_displayio_layout.widgets.cartesian import Cartesian
 from adafruit_bitmap_font import bitmap_font
 import bitmaptools
+from adafruit_bitmapsaver import save_pixels
 
 import adafruit_il0373
 
@@ -113,6 +114,8 @@ data = [
 my_plane.add_plot_line(0, 0)
 for x, y in data:
     my_plot_line(my_plane, x, y)
+
+save_pixels('screenshot.bmp', display)
 
 display.show(my_group)  # add high level Group to the display
 display.refresh()
