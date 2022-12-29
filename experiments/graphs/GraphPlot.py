@@ -15,8 +15,8 @@ class GraphPlot:
     def __init__(self, bitmap, origin: tuple, top_right: tuple, font, line_color: int, yticks_color: int,
                  font_color: int, line_width: int = 2, background_color: int = 0, font_height=None):
         self.bitmap = bitmap
-        self.origin = origin
-        self.top_right = top_right
+        self.origin = origin  # tuple of (x, y)
+        self.top_right = top_right  # tuple of (x, y)
         self.font = font
         self.line_color = line_color
         self.yticks_color = yticks_color
@@ -43,9 +43,9 @@ class GraphPlot:
         max_data = max(data_array)
         self.max_data_with_margin = max_data * self.ytick_margin_percentage
         min_data = min(data_array)
-        self.min_data_with_margin = min_data * (1 / self.ytick_margin_percentage)
+        self.min_data_with_margin = min_data * (2 - self.ytick_margin_percentage)
         data_range_with_margin = self.max_data_with_margin - self.min_data_with_margin
-        self.data_range_with_margin_to_pixel_factor = self.graph_width / data_range_with_margin
+        self.data_range_with_margin_to_pixel_factor = self.graph_height / data_range_with_margin
 
         # Define ordinate labels
         min_ytick_data_separation = data_range_with_margin / self.max_n_yticks
@@ -56,7 +56,7 @@ class GraphPlot:
         # Now we decomposed the value into mantissa (min_ytick_data_separation * decimal_factor) and exponent
         # (1 / decimal_factor)
         mantissa_value = min_ytick_data_separation * decimal_factor
-        # Round this value up to the next higher step in self.ytick_steps
+        # Round this value up to the next higher step in self.ytick_mantissa_steps
         mantissa_step = 1.0
         for step in self.ytick_mantissa_steps:
             if step > mantissa_value:
@@ -69,7 +69,8 @@ class GraphPlot:
 
 
     def y_data_to_pixel(self, y_value, compensation=0):
-        return round((y_value - self.min_data_with_margin) * self.data_range_with_margin_to_pixel_factor + compensation)
+        return round((y_value - self.min_data_with_margin) * self.data_range_with_margin_to_pixel_factor +
+                     compensation) + self.origin[1]
 
 
     def x_data_to_pixel(self, x_value):
@@ -86,6 +87,7 @@ class GraphPlot:
                 # bitmaptools.draw_line(self.bitmap, x_value, current_pixel_value_y + y_offset,
                 #                      x_value + 1, next_pixel_value_y + y_offset, self.line_color)
                 print(x_value, current_pixel_value_y + y_offset, x_value + 1, next_pixel_value_y + y_offset)
+            print()
 
             current_pixel_value_y = next_pixel_value_y
 
