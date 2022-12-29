@@ -115,7 +115,7 @@ my_plane.add_plot_line(0, 0)
 for x, y in data:
     my_plot_line(my_plane, x, y)
 
-save_pixels('screenshot.bmp', display)
+#save_pixels('screenshot.bmp', display)
 
 display.show(my_group)  # add high level Group to the display
 display.refresh()

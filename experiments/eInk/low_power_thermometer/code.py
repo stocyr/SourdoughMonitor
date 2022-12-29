@@ -75,7 +75,7 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     humidity_text = f'Humidity: {bme280.humidity:0.1f}%'
     font_small = terminalio.FONT
     text_area_small = label.Label(font_small, text=humidity_text, color=BLACK)
-    text_area_small.x = display.width // 2 - 60
+    text_area_small.x = display.width // 2 - 50
     text_area_small.y = 10
     my_group.append(text_area_small)
 
@@ -91,7 +91,7 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     per, vol = battery_monitor.cell_percent, battery_monitor.cell_voltage
     monitoring_text = f'Battery: {per:.0f}% ({vol:.2f}V)'
     font_small = terminalio.FONT
-    text_area_small = label.Label(font_small, text=monitoring_text, color=DARK)
+    text_area_small = label.Label(font_small, text=monitoring_text, color=BLACK)
     text_area_small.x = display.width // 2 - 60
     text_area_small.y = 118
     my_group.append(text_area_small)
