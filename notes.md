@@ -132,6 +132,12 @@ while True:
     time.sleep(0.5)
 ```
 
-
 We also found out we have the [revision C board](https://learn.adafruit.com/assets/109937),
 since the open-state value of I2C_POWER is *low*
+
+# Open TODOs
+
+- [ ] Experiment with button-wakeup from deep sleep
+- [ ] Measure current -- toggle lines to drive eInk low
+- [ ] Buy SD card for logging of values
+- [ ] 

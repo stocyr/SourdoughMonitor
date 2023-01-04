@@ -13,6 +13,7 @@ import busio
 from adafruit_bitmap_font import bitmap_font
 
 from GraphPlot import GraphPlot, PaletteColor
+from cyclic_buffer import Cyclic16BitTempBuffer
 import adafruit_il0373
 
 displayio.release_displays()
@@ -27,6 +28,8 @@ np_power.switch_to_input()
 i2c_power.switch_to_input()
 default_state = i2c_power.value
 i2c_power.switch_to_output(value=not default_state)
+
+temp_buffer = Cyclic16BitTempBuffer(0, 161)
 
 # Initialize e-Ink display
 with busio.SPI(board.SCK, board.MOSI) as spi:
@@ -48,6 +51,8 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     # Need to read twice: https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/f-a-q#faq-2958150
     dummy_read = bme280.temperature
     temperature = bme280.temperature
+    temp_buffer.add_value(temperature)
+    temp_array = temp_buffer.read_all()
 
     # Fonts used for the y-tick labels
     tick_font = bitmap_font.load_font("00Starmap-11-11.bdf")
@@ -64,10 +69,9 @@ with busio.SPI(board.SCK, board.MOSI) as spi:
     # Add the graph plot
     plot = GraphPlot(
         width=296, height=128, origin=(25, 116), top_right=(285, 35), font=tick_font, line_color=PaletteColor.black,
-        yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=3,
-        background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray)
-    # percentage_array = [100, 99.2, 127, 110.5, 104.8, 125.4, 153.0, 150.3]
-    temp_array = [22.35, 21.5, 22.03, 23.1, 23.5, 22.95, 23.55, 22.9]
+        yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=1,
+        background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
+        alignment='right')
     plot.plot_graph(temp_array)
     g.append(plot)
 

@@ -84,6 +84,13 @@ from [here](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/t
 - `neopixel.mpy`
 - `adafruit_ticks.mpy` (for millisecond time measurement)
 
+Hardware Limitations
+--------------------
+
+We don't want to use Button C on the eInk display since pulling it high would result in a constant current through the
+onboard LED.
+
+
 Usage
 -----
 
