@@ -14,18 +14,17 @@ import adafruit_il0373
 import adafruit_am2320
 from lib.tmf8821.adafruit_tmf8821 import TMF8821
 from math import sqrt, floor, ceil
+import neopixel
 
 from adafruit_bitmap_font import bitmap_font
 
 from utils.eink_constants import PaletteColor
 from utils.graph_plot import GraphPlot
-from utils.sleep_memory import Cyclic16BitTempBuffer, Cyclic16BitPercentageBuffer, SingleIntMemory
-from utils.battery_widget import BatteryWidget, BLACK, DARK, BRIGHT, WHITE
+from utils.sleep_memory import CyclicBuffer, Cyclic16BitTempBuffer, Cyclic16BitPercentageBuffer, SingleIntMemory
+from utils.battery_widget import BatteryWidget, BLACK, DARK, WHITE
 
-BOOT_TIME = 0.0  # second
-GRAPH_WIDTH = 161  # pixel
-FLOOR_DISTANCE = 143  # millimeter
-
+BOOT_TIME = 1.3  # second
+GRAPH_WIDTH = 261  # pixel
 DEBUG = True
 DEBUG_DELAY = 0.0
 
@@ -145,17 +144,40 @@ try:
     np_power = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
     i2c_power = digitalio.DigitalInOut(board.I2C_POWER)
 
-    # Disable power to NEOPIXEL
-    np_power.switch_to_input()
+    np_power.switch_to_output(True)
+    pixel = neopixel.NeoPixel(board.NEOPIXEL, 1)
+    pixel.brightness = 0.3
+    pixel.fill((0, 0, 255))
 
     # Re-enable I2C from low power mode
     i2c_power.switch_to_input()
     default_state = i2c_power.value
     i2c_power.switch_to_output(value=not default_state)
 
+    # Determine wakeup reason
+    wake = alarm.wake_alarm
+    wake_reason = 'unknown'
+    if wake is None:
+        wake_reason = 'reset'
+        if DEBUG:
+            print('Wakeup: Reset')
+    elif isinstance(wake, alarm.time.TimeAlarm):
+        wake_reason = 'timeout'
+        if DEBUG:
+            print(f'Wakeup: timeout')
+    elif isinstance(wake, alarm.pin.PinAlarm):
+        if DEBUG:
+            print(f'Wakeup: Pin {wake.pin} = {wake.value}')
+        if wake.pin == board.D11:
+            # Left button: toggle growth or temp
+            wake_reason = 'left'
+        elif wake.pin == board.D12:
+            # Middle button: toggle zoom
+            wake_reason = 'middle'
+
     # Set up persistent memory
     plot_type_mem = SingleIntMemory(addr=0, default_value=PlotType.growth)
-    zoom_mem = SingleIntMemory(addr=plot_type_mem.get_last_address(), default_value=Zoom.off)
+    zoom_mem = SingleIntMemory(addr=plot_type_mem.get_last_address(), default_value=Zoom.on)
     floor_height_mem = SingleIntMemory(addr=zoom_mem.get_last_address(), default_value=0)
     start_height_mem = SingleIntMemory(addr=floor_height_mem.get_last_address(), default_value=0)
     temp_mem = Cyclic16BitTempBuffer(addr=start_height_mem.get_last_address(), max_value_capacity=GRAPH_WIDTH)
@@ -165,6 +187,17 @@ try:
     plot_zoomed = zoom_mem()
     floor_height = floor_height_mem()
     start_height = start_height_mem()
+
+    # Mockup mode
+    with digitalio.DigitalInOut(board.D13) as right_button:
+        right_button.switch_to_input(digitalio.Pull.UP)
+        if not right_button.value and wake_reason == 'reset':
+            # Right button pressed during reset startup: mockup mode
+            temp_mem.fill_randomly(19, 29, amount=60)
+            growth_mem.fill_randomly(100.0, 100.5)
+            if DEBUG:
+                print('Filled both buffers with mock values')
+    print(f'Buffers: {growth_mem.current_size}, {temp_mem.current_size}')
 
     if DEBUG:
         print('IO and memory initialized.')
@@ -198,26 +231,6 @@ try:
         print("battery monitor initialized.")
         time.sleep(DEBUG_DELAY)
 
-    # Handle buttons: left button toggles temp/growth and middle button toggles zoom/full history
-    wake = alarm.wake_alarm
-    if wake is None:
-        wake_reason = 'reset'
-        if DEBUG:
-            print('Wakeup: Reset')
-    elif isinstance(wake, alarm.time.TimeAlarm):
-        wake_reason = 'timeout'
-        if DEBUG:
-            print(f'Wakeup: timeout')
-    elif isinstance(wake, alarm.pin.PinAlarm):
-        if DEBUG:
-            print(f'Wakeup: Pin {wake.pin} = {wake.value}')
-        if wake.pin == board.D11:
-            # Left button: toggle growth or temp
-            wake_reason = 'left'
-        elif wake.pin == board.D12:
-            # Middle button: toggle zoom
-            wake_reason = 'middle'
-
     # Initialize e-Ink display
     with busio.SPI(board.SCK, board.MOSI) as spi:
         epd_cs = board.D9
@@ -239,8 +252,55 @@ try:
         # Main display group
         g = displayio.Group()
 
+        main_messages = ['', '']
+
+        if DEBUG:
+            print(f'Startup time just before checking the buttons: {time.monotonic() - t_start:.2f}s')
+
+        # Check if a button was held the whole time:
+        if wake_reason == 'left':
+            with digitalio.DigitalInOut(board.D11) as left_button:
+                left_button.switch_to_input(digitalio.Pull.UP)
+                left_button_pressed = not left_button.value
+            if left_button_pressed:
+                # Left button pressed the whole time:
+                if distance is not None:
+                    if DEBUG:
+                        print(f'Floor height was reset: from {floor_height}mm to {round(distance)}mm')
+                    floor_height = floor_height_mem(new_value=round(distance))
+                    main_messages[0] = f'Floor calib {round(distance)}mm'
+                    # Floor was reset --> until recalibration of normal height, don't update growth
+                    growth_percentage = None
+            else:
+                # Left button pressed and released
+                if DEBUG:
+                    print(f'Switching plot: {plot_type} -> {3 - plot_type}')
+                plot_type = plot_type_mem(3 - plot_type)
+        elif wake_reason == 'middle':
+            with digitalio.DigitalInOut(board.D12) as middle_button:
+                middle_button.switch_to_input(digitalio.Pull.UP)
+                middle_button_pressed = not middle_button.value
+            if middle_button_pressed:
+                # Middle button pressed the whole time:
+                if height is not None:
+                    if DEBUG:
+                        print(f'Normal height was reset: from {start_height}mm to {floor(height)}mm')
+                    start_height = start_height_mem(new_value=floor(height))
+                    main_messages[1] = f'Height calib {floor(height)}mm'
+                    if floor_height is not None:
+                        # Right after calibration is complete, the first reading must be 100%
+                        growth_percentage = 100.0
+            else:
+                # Middle button pressed and released
+                if DEBUG:
+                    print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
+                plot_zoomed = zoom_mem(3 - plot_zoomed)
+
+        # Disable power to NEOPIXEL
+        np_power.switch_to_input()
+
         # Load background bitmap
-        f_bg = open('background.bmp' if plot_zoomed == Zoom.off else 'background_zoom.bmp', 'rb')
+        f_bg = open('background_zoom.bmp' if plot_zoomed == Zoom.on else 'background.bmp', 'rb')
         pic = displayio.OnDiskBitmap(f_bg)
         t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
         g.append(t)
@@ -270,48 +330,7 @@ try:
         if DEBUG:
             print("Battery symbol drawn.")
             time.sleep(DEBUG_DELAY)
-            print(f'Startup time just before graph: {time.monotonic() - t_start:.2f}s')
 
-        # Check if a button was held the whole time:
-        if wake_reason == 'left':
-            with digitalio.DigitalInOut(board.D11) as left_button:
-                left_button.switch_to_input(digitalio.Pull.UP)
-                left_button_pressed = not left_button.value
-            if left_button_pressed:
-                # Left button pressed the whole time:
-                if distance is not None:
-                    if DEBUG:
-                        print(f'Floor height was reset: from {floor_height}mm to {round(distance)}mm')
-                    floor_height = floor_height_mem(new_value=round(distance))
-                    g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor calib {round(distance)}mm',
-                                                x=95, y=56, background_color=WHITE))
-                    growth_percentage = None  # Floor was reset --> until recalibration of normal height, don't update growth
-            else:
-                # Left button pressed and released
-                if DEBUG:
-                    print(f'Switching plot: {plot_type} -> {3 - plot_type}')
-                plot_type = plot_type_mem(3 - plot_type)
-        elif wake_reason == 'middle':
-            with digitalio.DigitalInOut(board.D12) as middle_button:
-                middle_button.switch_to_input(digitalio.Pull.UP)
-                middle_button_pressed = not middle_button.value
-            if middle_button_pressed:
-                # Middle button pressed the whole time:
-                if height is not None:
-                    if DEBUG:
-                        print(f'Normal height was reset: from {start_height}mm to {floor(height)}mm')
-                    start_height = start_height_mem(new_value=floor(height))
-                    g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Height calib {floor(height)}mm',
-                                                x=90, y=75, background_color=WHITE))
-                    if floor_height is not None:
-                        # Right after calibration is complete, the first reading must be 100%
-                        growth_percentage = 100.0
-            else:
-                # Middle button pressed and released
-                if DEBUG:
-                    print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
-                plot_zoomed = zoom_mem(3 - plot_zoomed)
-        
         # Add current growth percentage to buffer
         if floor_height is not None and start_height is not None and growth_percentage is not None:
             growth_mem.add_value(growth_percentage)
@@ -323,25 +342,30 @@ try:
             background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
             alignment='right')
 
-        if plot_type == PlotType.temp:
-            plot_amount = temp_mem.current_size if plot_zoomed == Zoom.off else ceil(temp_mem.current_size / 2.0)
-            # temp_mem.debug_print()
-            value_array = temp_mem.read_array(amount=plot_amount)
+        plot_mem: CyclicBuffer = temp_mem if plot_type == PlotType.temp else growth_mem
+        if plot_zoomed == Zoom.on:
+            plot_amount = min(plot_mem.current_size, ceil(GRAPH_WIDTH / 2.0))
         else:
-            plot_amount = growth_mem.current_size if plot_zoomed == Zoom.off else ceil(growth_mem.current_size / 2.0)
-            # growth_mem.debug_print()
-            value_array = growth_mem.read_array(amount=plot_amount)
+            plot_amount = plot_mem.current_size
+
+        value_array = plot_mem.read_array(amount=plot_amount)
         if value_array:
             # print(f'Value array: {",".join(map(str, value_array))}')
             plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
         g.append(plot)
 
         if floor_height is None:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor not calibrated',
-                                        x=95, y=56, background_color=WHITE))
+            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor not calibrated', x=95, y=56,
+                                        background_color=WHITE))
+        else:
+            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[0], x=95, y=56,
+                                        background_color=WHITE))
         if start_height is None:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Height not calibrated',
-                                        x=90, y=75, background_color=WHITE))
+            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Height not calibrated', x=90, y=75,
+                                        background_color=WHITE))
+        else:
+            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[1], x=90, y=75,
+                                        background_color=WHITE))
 
         if DEBUG:
             print("Plot drawn.")

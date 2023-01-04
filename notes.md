@@ -135,6 +135,13 @@ while True:
 We also found out we have the [revision C board](https://learn.adafruit.com/assets/109937),
 since the open-state value of I2C_POWER is *low*
 
+## 05.01.2023 -- *Bootup time*
+
+We set the alarm time to `t_start + 15`
+Time measured that the boot process takes until it gets to the `t_start = time.monotonic()`:
+16.30, 16.27, 16.38, 16.21, 16.33
+--> average: 16.298 ~ 16.3 ==> bootup time = 1.3s
+
 # Open TODOs
 
 - [ ] Experiment with button-wakeup from deep sleep

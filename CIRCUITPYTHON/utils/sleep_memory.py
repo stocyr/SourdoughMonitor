@@ -59,26 +59,25 @@ class CyclicBuffer:
                 alarm.sleep_memory[
                 self.addr + self.addr_offset_tail:self.addr + self.addr_offset_tail + self.addr_tail_size], 'big')
             self.empty = alarm.sleep_memory[self.addr + self.addr_offset_empty]
-            if self.empty:
-                self.current_size = 0
+            if self.head == self.tail:
+                self.current_size = 0 if self.empty else self.value_capacity
             else:
                 self.current_size = int((self.head - self.tail) % self.capacity) // self.bytes_per_value
 
 
     def update_header(self, only_head_and_tail=False):
         if not only_head_and_tail:
-            alarm.sleep_memory[self.addr + self.addr_offset_capacity:self.addr + self.addr_offset_capacity +
-                                                                     self.addr_capacity_size] = \
+            alarm.sleep_memory[self.addr + self.addr_offset_capacity:
+                               self.addr + self.addr_offset_capacity + self.addr_capacity_size] = \
                 self.capacity.to_bytes(self.addr_capacity_size, 'big')
-            alarm.sleep_memory[
-            self.addr + self.addr_offset_bytes_per_value:self.addr + self.addr_offset_bytes_per_value +
-                                                         self.addr_bytes_per_value_size] = \
+            alarm.sleep_memory[self.addr + self.addr_offset_bytes_per_value:
+                               self.addr + self.addr_offset_bytes_per_value + self.addr_bytes_per_value_size] = \
                 self.bytes_per_value.to_bytes(self.addr_bytes_per_value_size, 'big')
-        alarm.sleep_memory[self.addr + self.addr_offset_head:self.addr + self.addr_offset_head +
-                                                             self.addr_head_size] = \
+        alarm.sleep_memory[self.addr + self.addr_offset_head:
+                           self.addr + self.addr_offset_head + self.addr_head_size] = \
             self.head.to_bytes(self.addr_head_size, 'big')
-        alarm.sleep_memory[self.addr + self.addr_offset_tail:self.addr + self.addr_offset_tail +
-                                                             self.addr_tail_size] = \
+        alarm.sleep_memory[self.addr + self.addr_offset_tail:
+                           self.addr + self.addr_offset_tail + self.addr_tail_size] = \
             self.tail.to_bytes(self.addr_tail_size, 'big')
         alarm.sleep_memory[self.addr + self.addr_offset_empty] = self.empty
 
@@ -121,7 +120,8 @@ class CyclicBuffer:
         return val_list
 
 
-    def empty(self):
+    def make_empty(self):
+        self.head = self.addr + self.header_size
         self.tail = self.head
         self.current_size = 0
         self.empty = 1
@@ -138,9 +138,11 @@ class CyclicBuffer:
         pass
 
 
-    def debug_print(self, max_addr=None):
-        if max_addr is None:
+    def debug_print(self, max_bytes=None):
+        if max_bytes is None:
             max_addr = self.addr + self.header_size + self.capacity
+        else:
+            max_addr = self.addr + self.header_size + max_bytes
         sizes = [self.addr_capacity_size, self.addr_bytes_per_value_size, self.addr_head_size, self.addr_tail_size, 1]
         descs = ['capacity', 'bytes per value', 'head', 'tail', 'empty']
         print('adr, val')
@@ -156,6 +158,18 @@ class CyclicBuffer:
 
         print(f'capacity:{self.value_capacity} values ({self.capacity}B) @{self.bytes_per_value}B/value,', end='')
         print(f' {self.tail}->{self.head}, {self.current_size} values')
+
+
+    def fill_randomly(self, min_val: float, max_val: float, amount=None, exp_alpha=0.1):
+        import random
+        random.seed(self.addr)
+        self.make_empty()
+        amount = self.value_capacity if amount is None else min(self.value_capacity, amount)
+        exp_filtered = (max_val + min_val) / 2
+        for i in range(amount):
+            val = min_val + random.random() * (max_val - min_val)
+            exp_filtered = exp_alpha * val + (1 - exp_alpha) * exp_filtered
+            self.add_value(exp_filtered)
 
 
     def get_last_address(self):

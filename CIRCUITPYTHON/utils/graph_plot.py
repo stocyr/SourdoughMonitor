@@ -128,11 +128,11 @@ class GraphPlot(Widget):
 
 
     def _draw_yticks_and_labels(self):
-        max_characters = ceil((self.origin[0] - self.yticks_length - 3) / self._font_width)
+        # max_characters = ceil((self.origin[0] - self.yticks_length - 4) / self._font_width)
         for factor in range(self.first_ytick_factor, self.last_ytick_factor + 1):
             y = self.y_data_to_pixel(self.ytick_separation * factor)
             precision = 1 if self.decimal_factor > 1 else 0
-            tick_text = '{1:.{0}f}'.format(precision, self.ytick_separation * factor)[:max_characters]
+            tick_text = '{1:.{0}f}'.format(precision, self.ytick_separation * factor)  # [:max_characters]
 
             estimated_text_width = len(tick_text) * self._font_width
             if not self.dry:
@@ -143,12 +143,14 @@ class GraphPlot(Widget):
                                           self.ygrid_color)
             else:
                 print(self.origin[0], y, self.origin[0] + self.yticks_length, y)
+            x_pos = self.origin[0] - self.yticks_length - estimated_text_width - 4
             tick_label = bitmap_label.Label(
                 self.font,
                 color=self._palette[self.font_color],
                 text=tick_text,
-                x=self.origin[0] - self.yticks_length - estimated_text_width - 3,
+                x=max(1, x_pos),
                 y=y,
+                background_color=None if x_pos >= 1 else self._palette[PaletteColor.white]
             )
             self.append(tick_label)
 
@@ -160,7 +162,7 @@ class GraphPlot(Widget):
         if self.alignment == 'right':
             current_pixel_value_x = self.top_right[0] - (len(data_array) - 1) * advance
         else:
-            current_pixel_value_x = self.origin[0] 
+            current_pixel_value_x = self.origin[0]
 
         for x_value in range(len(data_array) - 1):
             next_pixel_value_y = self.y_data_to_pixel(data_array[x_value + 1], compensate_even_thickness)
