@@ -149,11 +149,6 @@ try:
     pixel.brightness = 0.3
     pixel.fill((0, 0, 255))
 
-    # Re-enable I2C from low power mode
-    i2c_power.switch_to_input()
-    default_state = i2c_power.value
-    i2c_power.switch_to_output(value=not default_state)
-
     # Determine wakeup reason
     wake = alarm.wake_alarm
     wake_reason = 'unknown'

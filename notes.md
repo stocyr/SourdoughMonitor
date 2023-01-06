@@ -100,14 +100,14 @@ am = adafruit_am2320.AM2320(i2c)
 delay = 0.1
 
 while True:
-    # Note: reading from the sensor within intervals of > 10Hz is not supported:
-    # It goes to sleep mode and doesn't wake up on time. Thus, wait at least 100ms
-    # before performing another reading. The sensor itself doesn't update the internal
-    # measurement register more frequently than every 2s anyway.
-    print("Temperature: ", am.temperature)
-    time.sleep(delay)
-    print("Humidity: ", am.relative_humidity)
-    time.sleep(delay)
+# Note: reading from the sensor within intervals of > 10Hz is not supported:
+# It goes to sleep mode and doesn't wake up on time. Thus, wait at least 100ms
+# before performing another reading. The sensor itself doesn't update the internal
+# measurement register more frequently than every 2s anyway.
+print("Temperature: ", am.temperature)
+time.sleep(delay)
+print("Humidity: ", am.relative_humidity)
+time.sleep(delay)
 ```
 
 ## 02.10.2022 -- *BME280*
@@ -142,9 +142,87 @@ Time measured that the boot process takes until it gets to the `t_start = time.m
 16.30, 16.27, 16.38, 16.21, 16.33
 --> average: 16.298 ~ 16.3 ==> bootup time = 1.3s
 
+## 06.01.2023 -- *AM2320 Connection Failures*
+
+The AM2320 doesn't answer to I2C calls from a cold start of the uC. Soft restart makes it work flawlessly. Related
+problems online:
+
+- https://community.home-assistant.io/t/temperature-humidity-sensor-with-am2320-esp32/360126/10
+- https://github.com/esphome/issues/issues/1742
+- https://github.com/esphome/issues/issues/192#issuecomment-481171704
+
+The following code works both in soft restarts and cold starts:
+
+```python
+import time
+import board
+from busio import I2C
+import adafruit_am2320
+import digitalio
+
+led = digitalio.DigitalInOut(board.LED)
+led.switch_to_output(True)
+
+# Block 1: restart i2c bus
+i2c_pow = digitalio.DigitalInOut(board.I2C_POWER)
+i2c_pow.switch_to_input()
+time.sleep(0.5)
+default_state = i2c_pow.value
+i2c_pow.switch_to_output(not default_state)
+# Block 2: sleep before i2c initialization
+time.sleep(2)
+i2c = I2C(board.SCL, board.SDA, frequency=125000)
+# Block 3: sleep between i2c initialization and sensor setup
+time.sleep(2)
+am = adafruit_am2320.AM2320(i2c)
+# Block 4: sleep before sensor read
+time.sleep(2)
+
+delay = 0.3
+while True:
+    print("Temperature: ", am.temperature)
+    time.sleep(delay)
+    print("Humidity: ", am.relative_humidity)
+    time.sleep(delay)
+    led.value = not led.value
+```
+
+1. Trial: disable block 4 --> still works
+2. Trial: disable blocks 3, 4 --> still works
+3. Trial: disable blocks 2, 3, 4 --> fails
+4. Trial: disable blocks 1, 3, 4 --> still works
+5. Trial: disable blocks 1, 3, 4 and insert a i2c power-cycle between the 2s sleep and the i2c initialization --> fails
+6. Trial: take trial 5 and move the 2s sleep between i2c power-cycle and i2c initialization --> works
+
+It turns out the following code works in both cases:
+
+```python
+import time
+import board
+from busio import I2C
+import adafruit_am2320
+import digitalio
+
+led = digitalio.DigitalInOut(board.LED)
+led.switch_to_output(True)
+
+time.sleep(2)
+i2c = I2C(board.SCL, board.SDA, frequency=125000)
+am = adafruit_am2320.AM2320(i2c)
+
+delay = 0.3
+while True:
+    print("Temperature: ", am.temperature)
+    time.sleep(delay)
+    print("Humidity: ", am.relative_humidity)
+    time.sleep(delay)
+    led.value = not led.value
+```
+
 # Open TODOs
 
-- [ ] Experiment with button-wakeup from deep sleep
 - [ ] Measure current -- toggle lines to drive eInk low
+- [ ] Profile rest of the application and reduce sleep times
 - [ ] Buy SD card for logging of values
-- [ ] 
+
+
