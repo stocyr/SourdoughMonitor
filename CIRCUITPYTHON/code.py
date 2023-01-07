@@ -1,22 +1,27 @@
 import time
 
 t_start = time.monotonic()  # To accurately measure the startup time
-
-import alarm
 import digitalio
-import adafruit_bme280.advanced as adafruit_bme280
 import board
+
+i2c_power = digitalio.DigitalInOut(board.I2C_POWER)
+i2c_power.switch_to_input()
+
+from math import sqrt, floor, ceil
+import alarm
+import busio
+import neopixel
+import adafruit_bme280.advanced as adafruit_bme280
 import displayio
 from adafruit_display_text import bitmap_label
-import busio
 from adafruit_lc709203f import LC709203F
 import adafruit_il0373
 import adafruit_am2320
 from lib.tmf8821.adafruit_tmf8821 import TMF8821
-from math import sqrt, floor, ceil
-import neopixel
-
 from adafruit_bitmap_font import bitmap_font
+
+default_state = i2c_power.value
+i2c_power.switch_to_output(not default_state)
 
 from utils.eink_constants import PaletteColor
 from utils.graph_plot import GraphPlot
@@ -139,10 +144,7 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
 
 
 try:
-    d_time = time.monotonic()
-    print(f'sequence begin: {BOOT_TIME + t_start:.2f}, delta: {d_time - t_start:.2f}')
     displayio.release_displays()
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after displayio.release_displays(): {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
     np_power = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
 
     np_power.switch_to_output(True)
@@ -170,8 +172,6 @@ try:
         elif wake.pin == board.D12:
             # Middle button: toggle zoom
             wake_reason = 'middle'
-    
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after wakeup determination: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     # Set up persistent memory
     plot_type_mem = SingleIntMemory(addr=0, default_value=PlotType.growth)
@@ -185,8 +185,6 @@ try:
     plot_zoomed = zoom_mem()
     floor_height = floor_height_mem()
     start_height = start_height_mem()
-
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after memory setup and read (ints): {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     # Mockup mode
     with digitalio.DigitalInOut(board.D13) as right_button:
@@ -207,13 +205,8 @@ try:
     print(f'Wake time until i2c init: {BOOT_TIME + time.monotonic() - t_start:.2}s')
     i2c = busio.I2C(board.SCL, board.SDA, frequency=125000)
 
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after i2c init: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
     # Read outside temperature and humidity from BME280 sensor
     board_temp, board_humidity = read_board_environment(i2c)
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after board temp read: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-    temp_mem.add_value(board_temp)
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after temp value append: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     if DEBUG:
         print("BME280 read.")
@@ -221,7 +214,7 @@ try:
 
     # Read inside temperature and humidity from AM2320 sensor
     ext_temp, ext_humidity = read_external_environment(i2c)
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after ext temp read: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
+    temp_mem.add_value(ext_temp)
 
     if DEBUG:
         print("AM2320 read.")
@@ -230,12 +223,8 @@ try:
     # Read time-of-flight distance from TMF8821 sensor
     height, growth_percentage, distance = read_distance(i2c, floor_height, start_height)
 
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after distance read: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
     # Read charge percentage from battery monitor
     battery_percentage = LC709203F(i2c).cell_percent
-
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after battery read: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     if DEBUG:
         print("battery monitor initialized.")
@@ -249,8 +238,6 @@ try:
         time.sleep(0.1)
         display = adafruit_il0373.IL0373(display_bus, width=296, height=128, rotation=270, black_bits_inverted=False,
                                          color_bits_inverted=False, grayscale=True, refresh_time=1, border=None)
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after display init: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         if DEBUG:
             print("display initialized.")
@@ -260,8 +247,6 @@ try:
         tick_font = bitmap_font.load_font('fonts/00Starmap-11-11.bdf')
         tahoma_font = bitmap_font.load_font('fonts/Tahoma_12.bdf')
         tahoma_bold_font = bitmap_font.load_font('fonts/Tahoma-Bold_12.bdf')
-
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after font load: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         # Main display group
         g = displayio.Group()
@@ -309,8 +294,6 @@ try:
                 if DEBUG:
                     print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
                 plot_zoomed = zoom_mem(3 - plot_zoomed)
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after button handling: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         # Disable power to NEOPIXEL
         np_power.switch_to_input()
@@ -320,8 +303,6 @@ try:
         pic = displayio.OnDiskBitmap(f_bg)
         t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
         g.append(t)
-
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after background draw: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         if DEBUG:
             print('Display background drawn.')
@@ -333,8 +314,6 @@ try:
 
         draw_texts(g, tahoma_font, tahoma_bold_font, ext_temp, ext_humidity, board_temp, board_humidity,
                    growth_percentage, peak_percentage, peak_hours)
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after text draw: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         if DEBUG:
             print("Labels drawn.")
@@ -347,8 +326,6 @@ try:
         g.append(battery_symbol)
         g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=263, y=13))
 
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after battery draw: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
         if DEBUG:
             print("Battery symbol drawn.")
             time.sleep(DEBUG_DELAY)
@@ -356,8 +333,6 @@ try:
         # Add current growth percentage to buffer
         if floor_height is not None and start_height is not None and growth_percentage is not None:
             growth_mem.add_value(growth_percentage)
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after growth write: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         # Add the graph plot
         plot = GraphPlot(
@@ -365,8 +340,6 @@ try:
             yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=1,
             background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
             alignment='right')
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after plot init: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         plot_mem: CyclicBuffer = temp_mem if plot_type == PlotType.temp else growth_mem
         if plot_zoomed == Zoom.on:
@@ -376,14 +349,10 @@ try:
 
         value_array = plot_mem.read_array(amount=plot_amount)
 
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after full buffer read: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
         if value_array:
             # print(f'Value array: {",".join(map(str, value_array))}')
             plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
         g.append(plot)
-
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after graph draw: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         if floor_height is None:
             g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor not calibrated', x=95, y=56,
@@ -397,8 +366,6 @@ try:
         else:
             g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[1], x=90, y=75,
                                         background_color=WHITE))
-        
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after message text writes: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
         if DEBUG:
             print("Plot drawn.")
@@ -407,8 +374,6 @@ try:
         display.show(g)
         display.refresh()
 
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after display refresh: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
         if DEBUG:
             print("Display refreshed.")
             time.sleep(DEBUG_DELAY)
@@ -416,15 +381,10 @@ try:
         # Prepare for low power deep sleep
         displayio.release_displays()
 
-        delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after 2nd display_release(): {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
-
     f_bg.close()
 
     # Disable power to I2C bus
-    i2c_power = digitalio.DigitalInOut(board.I2C_POWER)
     i2c_power.switch_to_input()
-
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after i2c disable: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     if DEBUG:
         print("Setting up deep sleep.")
@@ -436,8 +396,6 @@ try:
     timeout_alarm = alarm.time.TimeAlarm(monotonic_time=t_start - BOOT_TIME + 3 * 60)
     left_alarm = alarm.pin.PinAlarm(pin=board.D11, value=False, pull=True)
     middle_alarm = alarm.pin.PinAlarm(pin=board.D12, value=False, pull=True)
-
-    delta = time.monotonic() - d_time;d_time = time.monotonic(); print(f'after alarm setup: {BOOT_TIME + t_start:.2f}, delta: {delta:.2f}')
 
     alarm.exit_and_deep_sleep_until_alarms(timeout_alarm, left_alarm, middle_alarm)
     # We will never get *here* -> timeout will force a restart and execute code from the top

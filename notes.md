@@ -219,10 +219,82 @@ while True:
     led.value = not led.value
 ```
 
+## 06.01.2023 -- *Timing profiling*
+
+From the output of the code in state #6ae7d30, the following timings were extracted (using a soft reboot):
+
+    sequence begin: 4.38, delta: 3.08
+    -> after displayio.release_displays(): 4.38, delta: 0.00
+    Wakeup: Reset
+    -> after wakeup determination: 4.39, delta: 0.01
+    -> after memory setup and read (ints): 4.40, delta: 0.01
+    Buffers: 0, 5
+    IO and memory initialized.
+    Wake time until i2c init: 4.4s
+    -> after i2c init: 4.40, delta: 0.01
+    -> after board temp read: 4.72, delta: 0.32
+    -> after temp value append: 4.72, delta: 0.00
+    BME280 read.
+    -> after ext temp read: 5.21, delta: 0.49
+    AM2320 read.
+    Distance: 11.00 with std = 0.0
+    Floor height not calibrated yet
+    -> after distance read: 7.00, delta: 1.79
+    -> after battery read: 7.01, delta: 0.01
+    battery monitor initialized.
+    -> after display init: 7.12, delta: 0.11
+    display initialized.
+    -> after font load: 7.50, delta: 0.38
+    Startup time just before checking the buttons: 6.20s
+    -> after button handling: 7.51, delta: 0.00
+    -> after background draw: 7.51, delta: 0.01
+    Display background drawn.
+    -> after text draw: 9.82, delta: 2.31
+    Labels drawn.
+    -> after battery draw: 9.84, delta: 0.02
+    Battery symbol drawn.
+    -> after growth write: 9.84, delta: 0.00
+    -> after plot init: 9.85, delta: 0.01
+    -> after full buffer read: 9.85, delta: 0.00
+    -> after graph draw: 9.86, delta: 0.00
+    -> after message text writes: 11.78, delta: 1.92
+    Plot drawn.
+    -> after display refresh: 12.60, delta: 0.82
+    Display refreshed.
+    -> after 2nd display_release(): 12.60, delta: 0.00
+    -> after i2c disable: 12.61, delta: 0.00
+    Setting up deep sleep.
+    -> after alarm setup: 12.61, delta: 0.00
+
+Interesting conclusions:
+
+- Import handling takes 3s
+- Memory read / write at the begining only takes 10ms
+- Battery process read only takes 10ms
+- Wake time until i2c is initialized (must be > 3s for AM2320 to work): 4.4s
+- Wake time until Buttons are read for hold/non-hold state: 7.5s
+- Drawing the background only takes 10ms
+- Drawing the graph takes no time at all (fishy?)
+
+Sequence:
+
+1. Boot process (empirically measured):  1.3s
+2. Imports:                              3.0s
+3. BME280 temperature + humidity read:   0.3s
+4. AM2320 temperature + humidity read:   0.5s
+5. TMF8821 distance read (oversampled):  1.8s
+6. eInk display initialization:          0.1s
+7. Font loading:                         0.4s
+8. Text drawing (temperatures etc):      2.3s
+9. Messages drawing (both lines):        1.9s
+10. Display refresh:                     0.8s
+
+The following parts can be speed up:
+
+- distance readings can be reduced by 1.5s
+- messages aren't drawn in a calibrated system (-1.9s)
+
 # Open TODOs
 
 - [ ] Measure current -- toggle lines to drive eInk low
-- [ ] Profile rest of the application and reduce sleep times
 - [ ] Buy SD card for logging of values
-
-
