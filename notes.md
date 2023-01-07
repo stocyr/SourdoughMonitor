@@ -291,10 +291,21 @@ Sequence:
 
 The following parts can be speed up:
 
-- distance readings can be reduced by 1.5s
+- distance readings can be reduced by 0.8s
 - messages aren't drawn in a calibrated system (-1.9s)
+
+## 07.01.2023 -- *TOF FoV*
+
+Bottom diameter = 90mm
+Distance to bottom = 110mm
+
+Field-of-view Angle = 2 * tan-1((diameter / 2) / distance) = 44.4°
+
+Either: 3x3 normal, 4x4 narrow, 4x4 normal with reduction to center 4,
 
 # Open TODOs
 
+- [ ] Peak detection and marking
+- [ ] Check distance when sensor is blocked: 11mm? (depends on surface)
+- [ ] Check accuracy of 1x vs 5x oversampling --> test with sourdough surface
 - [ ] Measure current -- toggle lines to drive eInk low
-- [ ] Buy SD card for logging of values

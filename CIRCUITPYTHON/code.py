@@ -7,6 +7,13 @@ import board
 i2c_power = digitalio.DigitalInOut(board.I2C_POWER)
 i2c_power.switch_to_input()
 
+# ===================== CONSTANTS =======================
+BOOT_TIME = 1.3  # second
+GRAPH_WIDTH = 261  # pixel
+DEBUG = True
+DEBUG_DELAY = 0.0
+# =======================================================
+
 from math import sqrt, floor, ceil
 import alarm
 import busio
@@ -20,6 +27,26 @@ import adafruit_am2320
 from lib.tmf8821.adafruit_tmf8821 import TMF8821
 from adafruit_bitmap_font import bitmap_font
 
+# Read buttons
+if DEBUG:
+    print(f'Startup time just before checking the buttons: {BOOT_TIME + time.monotonic() - t_start:.2f}s')
+with digitalio.DigitalInOut(board.D11) as left_button:
+    left_button.switch_to_input(digitalio.Pull.UP)
+    left_button_pressed = not left_button.value
+    left_button.pull = None
+with digitalio.DigitalInOut(board.D12) as middle_button:
+    middle_button.switch_to_input(digitalio.Pull.UP)
+    middle_button_pressed = not middle_button.value
+    middle_button.pull = None
+with digitalio.DigitalInOut(board.D13) as right_button:
+    right_button.switch_to_input(digitalio.Pull.UP)
+    right_button_pressed = not right_button.value
+    right_button.pull = None
+
+rgb_led = neopixel.NeoPixel(board.NEOPIXEL, 1)
+rgb_led.fill((0, 0, 255))
+
+# Power up i2c devices
 default_state = i2c_power.value
 i2c_power.switch_to_output(not default_state)
 
@@ -28,11 +55,10 @@ from utils.graph_plot import GraphPlot
 from utils.sleep_memory import CyclicBuffer, Cyclic16BitTempBuffer, Cyclic16BitPercentageBuffer, SingleIntMemory
 from utils.battery_widget import BatteryWidget, BLACK, DARK, WHITE
 
-BOOT_TIME = 1.3  # second
-GRAPH_WIDTH = 261  # pixel
-DEBUG = True
-DEBUG_DELAY = 0.0
+rgb_led.deinit()
 
+
+# ===================== METHODS =======================
 
 class Zoom:
     on = 1
@@ -50,7 +76,8 @@ def read_board_environment(i2c_device: busio.I2C):
     bme280.iir_filter = adafruit_bme280.IIR_FILTER_DISABLE
     bme280.overscan_temperature = adafruit_bme280.OVERSCAN_X16
     bme280.overscan_humidity = adafruit_bme280.OVERSCAN_X4
-    # Need to read twice: https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/f-a-q#faq-2958150
+    # Need to read twice: https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-
+    # sensor-breakout/f-a-q#faq-2958150
     dummy_read = bme280.temperature
     temperature = bme280.temperature
     humidity = bme280.humidity
@@ -68,13 +95,14 @@ def read_external_environment(i2c_device: busio.I2C):
         humidity = am2320.relative_humidity
     except ValueError:
         # This is an external sensor -- maybe it wasn't attached?
-        pass
+        if DEBUG:
+            print(f'External sensor not readable!')
     return temperature, humidity
 
 
-def read_distance(i2c_device: busio.I2C, floor: float, start: float, oversampling: int = 5):
-    height = None
-    growth_percentage = None
+def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: float, oversampling: int = 5):
+    _height = None
+    _growth_percentage = None
     mean_distance = None
     try:
         tof = TMF8821(i2c_device)
@@ -92,25 +120,23 @@ def read_distance(i2c_device: busio.I2C, floor: float, start: float, oversamplin
         if DEBUG:
             stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]))
             print(f'Distance: {mean_distance:.2f} with std = {stddev}')
-        if floor_height is None:
-            # Floor height wasn't calibrated yet
+        if _floor_height is None:  # Floor height wasn't calibrated yet
             if DEBUG:
                 print(f'Floor height not calibrated yet')
             raise Exception()
-        height = floor_height - mean_distance
-        if start_height is None:
-            # Start height wasn't calibrated yet
+        _height = _floor_height - mean_distance
+        if _start_height is None:  # Start height wasn't calibrated yet
             if DEBUG:
                 print(f'Start height not calibrated yet')
             raise Exception()
-        growth_percentage = height / start_height * 100
+        _growth_percentage = _height / _start_height * 100
         if DEBUG:
-            print(f'Floor: {floor_height}, Start: {start_height}, Height: {height}, Growth: {growth_percentage}')
+            print(f'Floor: {_floor_height}mm, Start height: {_start_height}mm, ', end='')
+            print(f'Current height: {_height:.1f}mm, Growth: {_growth_percentage:.2f}%')
     except Exception:
-        # This is an external sensor -- maybe it wasn't attached?
-        # Or either the floor or the start height wasn't calibrated
+        # Either the floor or the start height wasn't calibrated or the sensor isn't attached
         pass
-    return height, growth_percentage, mean_distance
+    return _height, _growth_percentage, mean_distance
 
 
 def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp, board_humidity, growth_percentage,
@@ -143,14 +169,53 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
         group.append(bitmap_label.Label(font_bold, color=BLACK, text=f'{peak_percentage:.0f}%', x=194, y=text_line2_y))
 
 
+def log_data_to_sd_card(temp_buffer: CyclicBuffer, growth_buffer: CyclicBuffer):
+    import os
+    import sdcardio
+    import storage
+    try:
+        with busio.SPI(board.SCK, board.MOSI, board.MISO) as spi:
+            sd_cd = board.D5
+            sd = sdcardio.SDCard(spi, sd_cd)
+            vfs = storage.VfsFat(sd)
+            storage.mount(vfs, '/sd')
+
+            files = os.listdir('/sd')
+            data_files = [f for f in files if f.startswith('data_') and f.endswith('.csv')]
+            if data_files:
+                next_number = int(sorted(data_files, reverse=True)[0][5:8]) + 1
+            else:
+                next_number = 0
+
+            # Read both buffers into arrays
+            growth_array = growth_buffer.read_array()
+            temp_array = temp_buffer.read_array()
+
+            with open(f'/sd/data_{next_number:03d}.csv', 'w') as file:
+                file.write('growth,temp\n')
+                max_rows = max(len(growth_array), len(temp_array))
+                for i in range(max_rows):
+                    i_growth = i - (max_rows - len(growth_array))
+                    i_temp = i - (max_rows - len(temp_array))
+                    if i_growth >= 0:
+                        file.write(f'{growth_array[i_growth]:.2f},')
+                    else:
+                        file.write(',')
+                    if i_temp >= 0:
+                        file.write(f'{temp_array[i_temp]:.2f}')
+                    file.write('\n')
+            # Close SD card connection and safely unmount
+            sd.sync()
+            storage.umount(vfs)
+    except Exception as e:
+        if DEBUG:
+            print(f'Couldn\'t write to SD card: {e}')
+
+
+# ===================== MAIN CODE =======================
+
 try:
     displayio.release_displays()
-    np_power = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
-
-    np_power.switch_to_output(True)
-    pixel = neopixel.NeoPixel(board.NEOPIXEL, 1)
-    pixel.brightness = 0.3
-    pixel.fill((0, 0, 255))
 
     # Determine wakeup reason
     wake = alarm.wake_alarm
@@ -167,10 +232,8 @@ try:
         if DEBUG:
             print(f'Wakeup: Pin {wake.pin} = {wake.value}')
         if wake.pin == board.D11:
-            # Left button: toggle growth or temp
             wake_reason = 'left'
         elif wake.pin == board.D12:
-            # Middle button: toggle zoom
             wake_reason = 'middle'
 
     # Set up persistent memory
@@ -187,22 +250,22 @@ try:
     start_height = start_height_mem()
 
     # Mockup mode
-    with digitalio.DigitalInOut(board.D13) as right_button:
-        right_button.switch_to_input(digitalio.Pull.UP)
-        if not right_button.value and wake_reason == 'reset':
-            # Right button pressed during reset startup: mockup mode
-            temp_mem.fill_randomly(19, 29, amount=60)
-            growth_mem.fill_randomly(100.0, 100.5)
-            if DEBUG:
-                print('Filled both buffers with mock values')
-    print(f'Buffers: {growth_mem.current_size}, {temp_mem.current_size}')
+    if wake_reason == 'reset' and right_button_pressed:
+        # Right button pressed during reset startup: mockup mode
+        temp_mem.fill_randomly(19.0, 29.0)
+        growth_mem.fill_randomly(100.0, 150.0)
+        if DEBUG:
+            print('Filled both buffers with mock values')
+    if DEBUG:
+        print(f'Buffers: {growth_mem.current_size}, {temp_mem.current_size}')
 
     if DEBUG:
         print('IO and memory initialized.')
         time.sleep(DEBUG_DELAY)
 
     # Initialize I2C
-    print(f'Wake time until i2c init: {BOOT_TIME + time.monotonic() - t_start:.2}s')
+    if DEBUG:
+        print(f'Wake time until i2c init: {BOOT_TIME + time.monotonic() - t_start:.2}s')
     i2c = busio.I2C(board.SCL, board.SDA, frequency=125000)
 
     # Read outside temperature and humidity from BME280 sensor
@@ -214,7 +277,8 @@ try:
 
     # Read inside temperature and humidity from AM2320 sensor
     ext_temp, ext_humidity = read_external_environment(i2c)
-    temp_mem.add_value(ext_temp)
+    if ext_temp is not None:
+        temp_mem.add_value(ext_temp)
 
     if DEBUG:
         print("AM2320 read.")
@@ -225,6 +289,48 @@ try:
 
     # Read charge percentage from battery monitor
     battery_percentage = LC709203F(i2c).cell_percent
+
+    # Disable power to I2C bus
+    i2c_power.switch_to_input()
+
+    # Button press logic
+    main_messages = ['', '']
+    if left_button_pressed and middle_button_pressed:
+        # Both buttons pressed --> Store log
+        log_data_to_sd_card(temp_mem, growth_mem)
+        if DEBUG:
+            print(f'Logged data to SD card')
+    elif wake_reason == 'left':
+        if left_button_pressed:
+            # Left button pressed --> calibrate floor
+            if distance is not None:
+                if DEBUG:
+                    print(f'Floor distance was reset: from {floor_height}mm to {round(distance)}mm')
+                floor_height = floor_height_mem(new_value=round(distance))
+                main_messages[0] = f'Floor calib {round(distance)}mm'
+                # Floor was reset, so until recalibration of normal height, don't update growth
+                growth_percentage = None
+        else:
+            # Left button clicked --> toggle plot type
+            if DEBUG:
+                print(f'Switching plot: {plot_type} -> {3 - plot_type}')
+            plot_type = plot_type_mem(3 - plot_type)
+    elif wake_reason == 'middle':
+        if middle_button_pressed:
+            # Middle button pressed --> calibrate height
+            if height is not None:
+                if DEBUG:
+                    print(f'Normal height was reset: from {start_height}mm to {floor(height)}mm')
+                start_height = start_height_mem(new_value=floor(height))
+                main_messages[1] = f'Height calib {floor(height)}mm'
+                if floor_height is not None:
+                    # Right after calibration is complete, the first reading must be 100%
+                    growth_percentage = 100.0
+        else:
+            # Middle button clicked --> toggle plot zoom
+            if DEBUG:
+                print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
+            plot_zoomed = zoom_mem(3 - plot_zoomed)
 
     if DEBUG:
         print("battery monitor initialized.")
@@ -250,53 +356,6 @@ try:
 
         # Main display group
         g = displayio.Group()
-
-        main_messages = ['', '']
-
-        if DEBUG:
-            print(f'Startup time just before checking the buttons: {time.monotonic() - t_start:.2f}s')
-
-        # Check if a button was held the whole time:
-        if wake_reason == 'left':
-            with digitalio.DigitalInOut(board.D11) as left_button:
-                left_button.switch_to_input(digitalio.Pull.UP)
-                left_button_pressed = not left_button.value
-            if left_button_pressed:
-                # Left button pressed the whole time:
-                if distance is not None:
-                    if DEBUG:
-                        print(f'Floor height was reset: from {floor_height}mm to {round(distance)}mm')
-                    floor_height = floor_height_mem(new_value=round(distance))
-                    main_messages[0] = f'Floor calib {round(distance)}mm'
-                    # Floor was reset --> until recalibration of normal height, don't update growth
-                    growth_percentage = None
-            else:
-                # Left button pressed and released
-                if DEBUG:
-                    print(f'Switching plot: {plot_type} -> {3 - plot_type}')
-                plot_type = plot_type_mem(3 - plot_type)
-        elif wake_reason == 'middle':
-            with digitalio.DigitalInOut(board.D12) as middle_button:
-                middle_button.switch_to_input(digitalio.Pull.UP)
-                middle_button_pressed = not middle_button.value
-            if middle_button_pressed:
-                # Middle button pressed the whole time:
-                if height is not None:
-                    if DEBUG:
-                        print(f'Normal height was reset: from {start_height}mm to {floor(height)}mm')
-                    start_height = start_height_mem(new_value=floor(height))
-                    main_messages[1] = f'Height calib {floor(height)}mm'
-                    if floor_height is not None:
-                        # Right after calibration is complete, the first reading must be 100%
-                        growth_percentage = 100.0
-            else:
-                # Middle button pressed and released
-                if DEBUG:
-                    print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
-                plot_zoomed = zoom_mem(3 - plot_zoomed)
-
-        # Disable power to NEOPIXEL
-        np_power.switch_to_input()
 
         # Load background bitmap
         f_bg = open('background_zoom.bmp' if plot_zoomed == Zoom.on else 'background.bmp', 'rb')
@@ -382,9 +441,6 @@ try:
         displayio.release_displays()
 
     f_bg.close()
-
-    # Disable power to I2C bus
-    i2c_power.switch_to_input()
 
     if DEBUG:
         print("Setting up deep sleep.")
