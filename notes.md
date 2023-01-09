@@ -303,6 +303,14 @@ Field-of-view Angle = 2 * tan-1((diameter / 2) / distance) = 44.4°
 
 Either: 3x3 normal, 4x4 narrow, 4x4 normal with reduction to center 4,
 
+Seen from the top (sensor below the PCB) and with the holes on the lower side, the SPAD configuration of 3x3_normal is projected away from the angle of view as follows:
++---------+
+| 3  2  1 |
+| 6  5  4 |
+| 9  8  7 |
++---------+
+
+
 # Open TODOs
 
 - [ ] Peak detection and marking
