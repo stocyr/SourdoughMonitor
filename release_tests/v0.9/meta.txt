@@ -1,0 +1,20 @@
+Record data:
+
+floor calib: 113mm
+start heigh: 17mm
+
+Feed: 50+50+ ~20
+
+Problem: very noisy height progress -->
+ - record with higher frequency -> still so noisy?
+ - record all 9 regions -> is the noise only in the center or edge ones?
+ - record using 3x3 narrow instead of 3x3 normal
+
+Record data2:
+
+Source code change: 4x4 Narrow SPAD
+
+floor calib: 113mm
+start heigh: 28mm
+
+Feed: 50+50+ ~20
