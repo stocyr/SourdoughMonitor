@@ -101,6 +101,10 @@ def read_external_environment(i2c_device: busio.I2C):
 
 
 def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: float, oversampling: int = 5):
+    # TODO: either 
+    # - let the IOError for Device not found pass through -> message on screen or
+    # - raise something else for 11mm -> message on screen or
+    # - return _just_ the distance, then do the math in the main loop 
     _height = None
     _growth_percentage = None
     mean_distance = None
@@ -254,6 +258,7 @@ try:
     # Mockup mode
     if wake_reason == 'reset' and right_button_pressed:
         # Right button pressed during reset startup: mockup mode
+        # TODO: change to empty the plots --> at least the height...
         temp_mem.fill_randomly(19.0, 29.0)
         growth_mem.fill_randomly(100.0, 150.0)
         if DEBUG:
@@ -278,6 +283,7 @@ try:
         time.sleep(DEBUG_DELAY)
 
     # Read inside temperature and humidity from AM2320 sensor
+    # TODO: let the exception pass through, then print a message if sensor problem
     ext_temp, ext_humidity = read_external_environment(i2c)
     if ext_temp is not None:
         temp_mem.add_value(ext_temp)
@@ -333,6 +339,14 @@ try:
             if DEBUG:
                 print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
             plot_zoomed = zoom_mem(3 - plot_zoomed)
+
+    # TODO: If floor or height have been calibrated, empty the percentage buffer!
+
+    # Messages
+    if floor_height is None:
+        main_messages[0] = 'Floor not calibrated'
+    if start_height is None:
+        main_messages[1] = 'Height not calibrated'
 
     if DEBUG:
         print("battery monitor initialized.")
@@ -393,6 +407,9 @@ try:
 
         # Add current growth percentage to buffer
         if floor_height is not None and start_height is not None and growth_percentage is not None:
+            # TODO: always add value if we also add values to the temperature. but consider NaN in these cases
+            # - leave nan empty in plot -> if next value is NaN or current value is NaN, skip line
+            # - don't consider NaN in min/max calculation -> use either numpy or our own min/max implementation
             growth_mem.add_value(growth_percentage)
 
         # Add the graph plot
@@ -415,12 +432,14 @@ try:
             plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
         g.append(plot)
 
+        # Upper message line
         if floor_height is None:
             g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor not calibrated', x=95, y=56,
                                         background_color=WHITE))
         else:
             g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[0], x=95, y=56,
                                         background_color=WHITE))
+        # Lower message line
         if start_height is None:
             g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Height not calibrated', x=90, y=75,
                                         background_color=WHITE))
