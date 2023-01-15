@@ -109,6 +109,8 @@ def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: fl
         tof.config.iterations = 3.5e6
         tof.config.period_ms = 1  # as small as possible for repeated measurements
         tof.config.spad_map = '3x3_normal_mode'
+        tof.config.spread_spectrum_factor = 3
+        tof.active_range = 'short'
         tof.write_configuration()
         tof.start_measurements()
         all_distances = []
