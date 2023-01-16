@@ -40,7 +40,7 @@ from collections import namedtuple
 from time import sleep
 
 from adafruit_bus_device import i2c_device
-from adafruit_ticks import ticks_ms, ticks_add, ticks_less
+from adafruit_ticks import ticks_ms, ticks_add, ticks_less, ticks_diff
 from micropython import const
 
 from .tmf8821_config import TMF882X_Configuration
@@ -148,12 +148,13 @@ _TMF882X_REG_SPAD_Y_SIZE = const(0x90)  # y_size
 
 # If appid=0x03, cid_rid=0x19, the following describe Factory Calibration
 _TMF882X_REG_FACTORY_CALIBRATION_FIRST = const(0x24)  # factory_calibration_first – see section 7.3
-_TMF882X_REG_CROSSTALK_ZONE_i = [list(range(0x60 + 4 * i, 0x060 + 4 * (i + 1))) for i in
-                                 range(36)]  # crosstalk_amplitude_zone[i], 32-bit value, LSB first (little-endian)
-_TMF882X_REG_CROSSTALK_ZONE_i_TMUX = [list(range(0xB8 + 4 * i, 0xB8 + 4 * (i + 1))) for i in range(
-    36)]  # crosstalk_amplitude_zone[i] time muxed, 32-bit value, LSB first (little-endian) – for 4x4 mode this represents the zone 10 as described in section 7.4.3
-_TMF882X_REG_CALIBRATION_STATUS_FC = const(
-    0xDC)  # fc_status_during_cal - calibration status during factory calibration – copy of register 0x07 – 0x00 success, all other values are reporting an error during calibration
+_TMF882X_REG_CROSSTALK_ZONE_i = [list(range(0x60 + 4 * i, 0x060 + 4 * (i + 1))) for i in range(36)]  # crosstalk_
+# amplitude_zone[i], 32-bit value, LSB first (little-endian)
+_TMF882X_REG_CROSSTALK_ZONE_i_TMUX = [list(range(0xB8 + 4 * i, 0xB8 + 4 * (i + 1))) for i in range(36)]  # cross-
+# talk_amplitude_zone[i] time muxed, 32-bit value, LSB first (little-endian) – for 4x4 mode this represents the zone 10
+# as described in section 7.4.3
+_TMF882X_REG_CALIBRATION_STATUS_FC = const(0xDC)  # fc_status_during_cal - calibration status during factory
+# calibration – copy of register 0x07 – 0x00 success, all other values are reporting an error during calibration
 _TMF882X_REG_FACTORY_CALIBRATION_LAST = const(0xDF)  # factory_calibration_last
 
 # If appid=0x03, cid_rid=0x81, the following describe Raw data Histogram
@@ -194,6 +195,8 @@ _TMF882X_APP_CMD_WRITE_CONFIG_PAGE = const(0x15)
 _TMF882X_APP_CMD_LOAD_CONFIG_PAGE_COMMON = const(0x16)
 _TMF882X_APP_CMD_LOAD_CONFIG_PAGE_SPAD_1 = const(0x17)
 _TMF882X_APP_CMD_LOAD_CONFIG_PAGE_SPAD_2 = const(0x18)
+_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_FACTORY_CALIB = const(0x19)
+_TMF882X_APP_CMD_FACTORY_CALIBRATION = const(0x20)
 _TMF882X_APP_CMD_STOP = const(0xFF)
 
 _TMF882X_MEASUREMENT_RESULT = const(0x10)
@@ -205,6 +208,9 @@ _TMF882X_CMD_STAT_ACCEPTED = const(0x01)
 
 _TMF882X_ACTIVE_RANGE_SHORT = const(0x6E)
 _TMF882X_ACTIVE_RANGE_LONG = const(0x6F)
+
+_TMF882X_CALIBRATION_COMMON_CID = const(0x19)
+_TMF882X_CALIBRATION_PAGE_SIZE = const(0x00BC)
 
 Measurement = namedtuple('Measurement', 'result_number temperature number_valid_results ambient_light photon_count '
                                         'reference_count sys_tick confidences distances')
@@ -342,7 +348,7 @@ class TMF8821:
                     break
                 else:
                     continue
-            elif status == _TMF882X_CMD_STAT_ACCEPTED or status >= 0x10:
+            elif status >= 0x10:  # Read back until value is < 10
                 continue
             elif status in ignore:
                 break
@@ -450,15 +456,45 @@ class TMF8821:
     def active_range(self, active_range: str):
         self._active_range = active_range
         if active_range == 'long':
-            self._write_byte(_TMF882X_REG_ACTIVE_RANGE, _TMF882X_ACTIVE_RANGE_LONG)
+            self._write_app_command(_TMF882X_ACTIVE_RANGE_LONG)
+            self._check_app_cmd_executed()
+            if self._read_byte(_TMF882X_REG_ACTIVE_RANGE) != _TMF882X_ACTIVE_RANGE_LONG:
+                raise RuntimeError('Active range switch was unsuccessful!')
         elif active_range == 'short':
             if self.build & (1 << 4):
                 # Build revision has to have bit 4 set to support this
-                self._write_byte(_TMF882X_REG_ACTIVE_RANGE, _TMF882X_ACTIVE_RANGE_SHORT)
+                self._write_app_command(_TMF882X_ACTIVE_RANGE_SHORT)
+                self._check_app_cmd_executed()
+                if self._read_byte(_TMF882X_REG_ACTIVE_RANGE) != _TMF882X_ACTIVE_RANGE_SHORT:
+                    raise RuntimeError('Active range switch was unsuccessful!')
             else:
                 raise NotImplementedError()
         else:
             raise ValueError()
+
+
+    def factory_calibration(self, timeout_s=0.5, iterations=4e6) -> bytes:
+        self.config.iterations = iterations
+        self.write_configuration()
+        # Initiate factory calibration
+        print('started factory calib')
+        t_start = ticks_ms()
+        self._write_app_command(_TMF882X_APP_CMD_FACTORY_CALIBRATION)
+        # Wait for successful termination
+        self._check_app_cmd_executed(verbose=True, timeout_ms=int(timeout_s * 1000))
+        print(f'Calibration took {ticks_diff(t_start, ticks_ms())} ms.\nNow loading calibration page')
+        # Load calibration page
+        t_start = ticks_ms()
+        self._write_app_command(_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_FACTORY_CALIB)
+        self._check_app_cmd_executed(timeout_ms=50)
+        print(f'Page loading took {ticks_diff(t_start, ticks_ms())} ms.\nNow reading')
+        # Read factory calibration page
+        raw_page = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, _TMF882X_CALIBRATION_PAGE_SIZE + 4)
+        page_content, tid, *size = raw_page[:4]
+        size = size[0] + (size[1] << 8)
+        if not (page_content == _TMF882X_CALIBRATION_COMMON_CID and size == _TMF882X_CALIBRATION_PAGE_SIZE):
+            raise Exception('Error loading factory calibration page')
+        return raw_page[4:]
 
 
     def _read_byte(self, address: int) -> int:

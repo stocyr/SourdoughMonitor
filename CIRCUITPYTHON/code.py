@@ -101,10 +101,10 @@ def read_external_environment(i2c_device: busio.I2C):
 
 
 def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: float, oversampling: int = 5):
-    # TODO: either 
+    # TODO: either
     # - let the IOError for Device not found pass through -> message on screen or
     # - raise something else for 11mm -> message on screen or
-    # - return _just_ the distance, then do the math in the main loop 
+    # - return _just_ the distance, then do the math in the main loop
     _height = None
     _growth_percentage = None
     mean_distance = None
