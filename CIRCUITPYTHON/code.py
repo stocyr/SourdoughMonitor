@@ -100,13 +100,7 @@ def read_external_environment(i2c_device: busio.I2C):
     return temperature, humidity
 
 
-def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: float, oversampling: int = 5):
-    # TODO: either
-    # - let the IOError for Device not found pass through -> message on screen or
-    # - raise something else for 11mm -> message on screen or
-    # - return _just_ the distance, then do the math in the main loop
-    _height = None
-    _growth_percentage = None
+def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> float:
     mean_distance = None
     try:
         tof = TMF8821(i2c_device)
@@ -116,6 +110,7 @@ def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: fl
         tof.config.spread_spectrum_factor = 3
         tof.active_range = 'short'
         tof.write_configuration()
+        tof.load_factory_calibration(calib_folder='calibration')
         tof.start_measurements()
         all_distances = []
         for measurement_repetition in range(oversampling):
@@ -126,23 +121,9 @@ def read_distance(i2c_device: busio.I2C, _floor_height: float, _start_height: fl
         if DEBUG:
             stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]))
             print(f'Distance: {mean_distance:.2f} with std = {stddev}')
-        if _floor_height is None:  # Floor height wasn't calibrated yet
-            if DEBUG:
-                print(f'Floor height not calibrated yet')
-            raise Exception()
-        _height = _floor_height - mean_distance
-        if _start_height is None:  # Start height wasn't calibrated yet
-            if DEBUG:
-                print(f'Start height not calibrated yet')
-            raise Exception()
-        _growth_percentage = _height / _start_height * 100
-        if DEBUG:
-            print(f'Floor: {_floor_height}mm, Start height: {_start_height}mm, ', end='')
-            print(f'Current height: {_height:.1f}mm, Growth: {_growth_percentage:.2f}%')
+        return mean_distance
     except Exception:
-        # Either the floor or the start height wasn't calibrated or the sensor isn't attached
-        pass
-    return _height, _growth_percentage, mean_distance
+        return None
 
 
 def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp, board_humidity, growth_percentage,
@@ -175,7 +156,7 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
         group.append(bitmap_label.Label(font_bold, color=BLACK, text=f'{peak_percentage:.0f}%', x=194, y=text_line2_y))
 
 
-def log_data_to_sd_card(temp_buffer: CyclicBuffer, growth_buffer: CyclicBuffer):
+def log_data_to_sd_card(floor_calib: int, start_calib: int, temp_buffer: CyclicBuffer, growth_buffer: CyclicBuffer):
     import os
     import sdcardio
     import storage
@@ -198,6 +179,7 @@ def log_data_to_sd_card(temp_buffer: CyclicBuffer, growth_buffer: CyclicBuffer):
             temp_array = temp_buffer.read_array()
 
             with open(f'/sd/data_{next_number:03d}.csv', 'w') as file:
+                file.write(f'# Floor distance: {floor_calib}mm, start height: {start_calib}mm\n')
                 file.write('growth,temp\n')
                 max_rows = max(len(growth_array), len(temp_array))
                 for i in range(max_rows):
@@ -245,15 +227,15 @@ try:
     # Set up persistent memory
     plot_type_mem = SingleIntMemory(addr=0, default_value=PlotType.growth)
     zoom_mem = SingleIntMemory(addr=plot_type_mem.get_last_address(), default_value=Zoom.on)
-    floor_height_mem = SingleIntMemory(addr=zoom_mem.get_last_address(), default_value=0)
-    start_height_mem = SingleIntMemory(addr=floor_height_mem.get_last_address(), default_value=0)
+    floor_distance_mem = SingleIntMemory(addr=zoom_mem.get_last_address(), default_value=0)
+    start_height_mem = SingleIntMemory(addr=floor_distance_mem.get_last_address(), default_value=0)
     temp_mem = Cyclic16BitTempBuffer(addr=start_height_mem.get_last_address(), max_value_capacity=GRAPH_WIDTH)
     growth_mem = Cyclic16BitPercentageBuffer(addr=temp_mem.get_last_address(), max_value_capacity=GRAPH_WIDTH)
 
-    plot_type = plot_type_mem()
-    plot_zoomed = zoom_mem()
-    floor_height = floor_height_mem()
-    start_height = start_height_mem()
+    plot_type = plot_type_mem.value
+    plot_zoomed = zoom_mem.value
+    floor_distance = floor_distance_mem.value
+    start_height = start_height_mem.value
 
     # Mockup mode
     if wake_reason == 'reset' and right_button_pressed:
@@ -269,6 +251,8 @@ try:
     if DEBUG:
         print('IO and memory initialized.')
         time.sleep(DEBUG_DELAY)
+
+    message_lines = {'am2320': ('', False), 'tmf8821': ('', False), 'height_calibration': ('', False)}
 
     # Initialize I2C
     if DEBUG:
@@ -287,13 +271,53 @@ try:
     ext_temp, ext_humidity = read_external_environment(i2c)
     if ext_temp is not None:
         temp_mem.add_value(ext_temp)
+    else:
+        message_lines['am2320'] = (' Cannot read from AM2320 ', True)
 
     if DEBUG:
         print("AM2320 read.")
         time.sleep(DEBUG_DELAY)
 
     # Read time-of-flight distance from TMF8821 sensor
-    height, growth_percentage, distance = read_distance(i2c, floor_height, start_height)
+    current_distance = read_distance(i2c)
+
+    # Handle distance and calibrations
+    growth_percentage = None
+    dought_height = None
+    pausing = False
+    if current_distance is None:
+        if DEBUG:
+            print(f'Couldn\'t read from distance sensor!')
+        message_lines['tmf8821'] = 'Cannot read from TMF8821'
+    else:
+        # Distance measurement received
+        if current_distance <= 11:
+            # Object directly on the sensor --> lid sits on a surface
+            pausing = True
+            if DEBUG:
+                print(f'Lid sits on a surface')
+            message_lines['tmf8821'] = ('Sensor sits on surface, pausing', False)
+        else:
+            # Valid distance measurement
+            if floor_distance is None:
+                # Floor height wasn't calibrated yet
+                if DEBUG:
+                    print('Floor height not calibrated yet')
+                message_lines['tmf8821'] = (' Floor distance not calibrated ', True)
+            else:
+                # Floor height was calibrated
+                dought_height = floor_distance - current_distance
+                if start_height is None:
+                    # Start height wasn't calibrated yet
+                    if DEBUG:
+                        print(f'Start height not calibrated yet')
+                    message_lines['height_calibration'] = (' Start height not calibrated ', True)
+                else:
+                    # Start height calibrated
+                    growth_percentage = dought_height / start_height * 100
+                    if DEBUG:
+                        print(f'Floor: {floor_distance / 10:.1f}cm, Start height: {start_height / 10:.1f}cm, ', end='')
+                        print(f'Current height: {dought_height / 10:.1f}cm, Growth: {growth_percentage:.2f}%')
 
     # Read charge percentage from battery monitor
     battery_percentage = LC709203F(i2c).cell_percent
@@ -302,51 +326,56 @@ try:
     i2c_power.switch_to_input()
 
     # Button press logic
-    main_messages = ['', '']
     if left_button_pressed and middle_button_pressed:
         # Both buttons pressed --> Store log
-        log_data_to_sd_card(temp_mem, growth_mem)
+        log_data_to_sd_card(floor_distance, start_height, temp_mem, growth_mem)
         if DEBUG:
             print(f'Logged data to SD card')
+        if message_lines['height_calibration'][0] == '':
+            height_calibration['height_calibration'] = ('Logged data to SD card', False)
     elif wake_reason == 'left':
         if left_button_pressed:
             # Left button pressed --> calibrate floor
-            if distance is not None:
+            if current_distance is not None and not pausing:
+                distance_rounded = round(current_distance)
                 if DEBUG:
-                    print(f'Floor distance was reset: from {floor_height}mm to {round(distance)}mm')
-                floor_height = floor_height_mem(new_value=round(distance))
-                main_messages[0] = f'Floor calib {round(distance)}mm'
+                    print(f'Floor distance was reset to {distance_rounded / 10:.1f}cm')
+                floor_distance_mem.value = distance_rounded
+                floor_distance = distance_rounded
+                message_lines['tmf8821'] = f'Floor calib {distance_rounded / 10:.1f}cm'
                 # Floor was reset, so until recalibration of normal height, don't update growth
                 growth_percentage = None
+                # Also reset history of growths
+                growth_mem.make_empty()
         else:
             # Left button clicked --> toggle plot type
+            new_plot_type = 3 - plot_type
             if DEBUG:
-                print(f'Switching plot: {plot_type} -> {3 - plot_type}')
-            plot_type = plot_type_mem(3 - plot_type)
+                print(f'Switching plot: {plot_type} -> {new_plot_type}')
+            plot_type_mem.value = new_plot_type
+            plot_type = new_plot_type
     elif wake_reason == 'middle':
         if middle_button_pressed:
             # Middle button pressed --> calibrate height
-            if height is not None:
+            if dought_height is not None:
+                start_height_floored = int(floor(dought_height))
                 if DEBUG:
-                    print(f'Normal height was reset: from {start_height}mm to {floor(height)}mm')
-                start_height = start_height_mem(new_value=floor(height))
-                main_messages[1] = f'Height calib {floor(height)}mm'
-                if floor_height is not None:
+                    print(f'Start height was reset to {dought_height / 10:.1f}cm')
+                start_height_mem.value = start_height_floored
+                start_height = start_height_floored
+                message_lines['height_calibration'] = (f'Start height calib {start_height_floored / 10:.1f}cm', False)
+                if floor_distance is not None:
                     # Right after calibration is complete, the first reading must be 100%
                     growth_percentage = 100.0
+                    # Also clear growth mem
+                    growth_mem.make_empty()
         else:
             # Middle button clicked --> toggle plot zoom
+            new_plot_zoomed = 3 - plot_zoomed
             if DEBUG:
-                print(f'Switching zoom: {plot_zoomed} -> {3 - plot_zoomed}')
-            plot_zoomed = zoom_mem(3 - plot_zoomed)
-
-    # TODO: If floor or height have been calibrated, empty the percentage buffer!
-
-    # Messages
-    if floor_height is None:
-        main_messages[0] = 'Floor not calibrated'
-    if start_height is None:
-        main_messages[1] = 'Height not calibrated'
+                print(f'Switching zoom: {plot_zoomed} -> {new_plot_zoomed}')
+            zoom_mem.value = new_plot_zoomed
+            plot_zoomed = new_plot_zoomed
 
     if DEBUG:
         print("battery monitor initialized.")
@@ -398,6 +427,8 @@ try:
                                        background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
                                        exclamation_mark_threshold=0.038)
         battery_symbol.draw(battery_percentage / 100)
+        if battery_symbol.critical_battery and message_lines['am2320'][0] == '':
+            message_lines['am2320'] = (' Low battery ', True)
         g.append(battery_symbol)
         g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=263, y=13))
 
@@ -406,7 +437,7 @@ try:
             time.sleep(DEBUG_DELAY)
 
         # Add current growth percentage to buffer
-        if floor_height is not None and start_height is not None and growth_percentage is not None:
+        if floor_distance is not None and start_height is not None and growth_percentage is not None and not pausing:
             # TODO: always add value if we also add values to the temperature. but consider NaN in these cases
             # - leave nan empty in plot -> if next value is NaN or current value is NaN, skip line
             # - don't consider NaN in min/max calculation -> use either numpy or our own min/max implementation
@@ -432,20 +463,13 @@ try:
             plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
         g.append(plot)
 
-        # Upper message line
-        if floor_height is None:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Floor not calibrated', x=95, y=56,
-                                        background_color=WHITE))
-        else:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[0], x=95, y=56,
-                                        background_color=WHITE))
-        # Lower message line
-        if start_height is None:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=f'Height not calibrated', x=90, y=75,
-                                        background_color=WHITE))
-        else:
-            g.append(bitmap_label.Label(tahoma_bold_font, color=BLACK, text=main_messages[1], x=90, y=75,
-                                        background_color=WHITE))
+        # Write message lines
+        for key, y_pos in zip(['am2320', 'tmf8821', 'height_calibration'], [50, 70, 90]):
+            message, emphasize = message_lines[key]
+            if message != '':
+                color_fg, color_bg = (WHITE, BLACK) if emphasize else (BLACK, WHITE)
+                g.append(bitmap_label.Label(tahoma_bold_font, color=color_fg, text=message, x=75, y=y_pos,
+                                            background_color=color_bg))
 
         if DEBUG:
             print("Plot drawn.")
@@ -476,6 +500,7 @@ try:
 
     alarm.exit_and_deep_sleep_until_alarms(timeout_alarm, left_alarm, middle_alarm)
     # We will never get *here* -> timeout will force a restart and execute code from the top
-except KeyError as e:
-    print(e)
+finally:
+    #except BufferError as e:
+    #print(e)
     pass

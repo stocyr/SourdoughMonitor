@@ -54,8 +54,11 @@ class BatteryWidget(Widget):
 
         self.append(self._tilegrid)
 
+        self.critical_battery = False
+
 
     def draw(self, percentage: float):
+        self.critical_battery = False
         self._bitmap.fill(PaletteColor.transparent)
         fill_px = round(self._height * percentage)
         # Fill lower part
@@ -83,6 +86,7 @@ class BatteryWidget(Widget):
                              self._bitmap, self.background_color, self._palette, True)
 
         if percentage <= self.exclamation_mark_threshold:
+            self.critical_battery = True
             y_dot, width_dot, y_stem, height_stem, width_stem = self.exclamation_mark
             x_dot = round((self.width - width_dot) / 2)
             x_stem = round((self.width - width_stem) / 2)

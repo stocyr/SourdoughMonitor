@@ -239,11 +239,11 @@ class SingleIntMemory:
         self.default_value = default_value
 
         # First read existing value
-        self.value = int.from_bytes(alarm.sleep_memory[self.addr:self.addr + self.size], 'big')
-        if self.value == self.invalid_value:
+        self._value = int.from_bytes(alarm.sleep_memory[self.addr:self.addr + self.size], 'big')
+        if self._value == self.invalid_value:
             # Assume value has not been written yet
-            self.value = self.default_value
-            self._write(self.value)
+            self._value = self.default_value
+            self._write(self._value)
 
 
     def _write(self, val: int):
@@ -255,14 +255,16 @@ class SingleIntMemory:
         return value if value != self.invalid_value else None
 
 
-    def __call__(self, new_value: int = None):
-        if new_value is None:
-            self.value = self._read()
-            return self.value
-        else:
-            self.value = new_value
-            self._write(self.value)
-            return self.value
+    @property
+    def value(self) -> int:
+        self._value = self._read()
+        return self._value
+
+
+    @value.setter
+    def value(self, value: int):
+        self._value = value
+        self._write(self._value)
 
 
     def get_last_address(self):
