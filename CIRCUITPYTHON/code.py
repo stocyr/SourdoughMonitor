@@ -396,10 +396,14 @@ try:
             print("display initialized.")
             time.sleep(DEBUG_DELAY)
 
-        # Load fonts
-        tick_font = bitmap_font.load_font('fonts/00Starmap-11-11.bdf')
-        tahoma_font = bitmap_font.load_font('fonts/Tahoma_12.bdf')
-        tahoma_bold_font = bitmap_font.load_font('fonts/Tahoma-Bold_12.bdf')
+        # Load fonts and glyphs --> speeds up label rendering
+        # https://learn.adafruit.com/custom-fonts-for-pyportal-circuitpython-display/bitmap_font-library
+        tick_font = bitmap_font.load_font('fonts/00Starmap-11-11.pcf')
+        tahoma_font = bitmap_font.load_font('fonts/Tahoma_12.pcf')
+        tahoma_bold_font = bitmap_font.load_font('fonts/Tahoma-Bold_12.pcf')
+        tahoma_font.load_glyphs(b'1234567890-. ')
+        tick_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        tahoma_bold_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
         # Main display group
         g = displayio.Group()
