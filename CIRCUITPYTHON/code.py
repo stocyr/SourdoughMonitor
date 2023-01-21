@@ -236,8 +236,18 @@ try:
 
     plot_type = plot_type_mem.value
     plot_zoomed = zoom_mem.value
-    floor_distance = floor_distance_mem.value
     start_height = start_height_mem.value
+
+    # Look up if a floor calibration file is present
+    try:
+        with open('calibration/floor.txt', 'r') as f:
+            floor_distance = int(float(f.read()))
+            floor_distance_mem.value = floor_distance
+            if DEBUG:
+                print(f'Floor distance was loaded from file to {floor_distance / 10:.1f}cm')
+            message_lines['tmf8821'] = (f'Floor distance from file {floor_distance / 10:.1f}cm ', False)
+    except Exception:
+        floor_distance = floor_distance_mem.value
 
     # Mockup mode
     if wake_reason == 'reset' and right_button_pressed:
