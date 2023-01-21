@@ -288,7 +288,7 @@ try:
     if current_distance is None:
         if DEBUG:
             print(f'Couldn\'t read from distance sensor!')
-        message_lines['tmf8821'] = 'Cannot read from TMF8821'
+        message_lines['tmf8821'] = (' Cannot read from TMF8821 ', True)
     else:
         # Distance measurement received
         if current_distance <= 11:
@@ -332,7 +332,7 @@ try:
         if DEBUG:
             print(f'Logged data to SD card')
         if message_lines['height_calibration'][0] == '':
-            height_calibration['height_calibration'] = ('Logged data to SD card', False)
+            message_lines['height_calibration'] = ('Logged data to SD card', False)
     elif wake_reason == 'left':
         if left_button_pressed:
             # Left button pressed --> calibrate floor
@@ -342,7 +342,7 @@ try:
                     print(f'Floor distance was reset to {distance_rounded / 10:.1f}cm')
                 floor_distance_mem.value = distance_rounded
                 floor_distance = distance_rounded
-                message_lines['tmf8821'] = f'Floor calib {distance_rounded / 10:.1f}cm'
+                message_lines['tmf8821'] = (f'Floor calib {distance_rounded / 10:.1f}cm', False)
                 # Floor was reset, so until recalibration of normal height, don't update growth
                 growth_percentage = None
                 # Also reset history of growths
