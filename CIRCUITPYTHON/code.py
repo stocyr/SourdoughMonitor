@@ -205,6 +205,8 @@ def log_data_to_sd_card(floor_calib: int, start_calib: int, temp_buffer: CyclicB
 try:
     displayio.release_displays()
 
+    message_lines = {'am2320': ('', False), 'tmf8821': ('', False), 'height_calibration': ('', False)}
+
     # Determine wakeup reason
     wake = alarm.wake_alarm
     wake_reason = 'unknown'
@@ -252,8 +254,6 @@ try:
         print('IO and memory initialized.')
         time.sleep(DEBUG_DELAY)
 
-    message_lines = {'am2320': ('', False), 'tmf8821': ('', False), 'height_calibration': ('', False)}
-
     # Initialize I2C
     if DEBUG:
         print(f'Wake time until i2c init: {BOOT_TIME + time.monotonic() - t_start:.2}s')
@@ -296,7 +296,7 @@ try:
             pausing = True
             if DEBUG:
                 print(f'Lid sits on a surface')
-            message_lines['tmf8821'] = ('Sensor sits on surface, pausing', False)
+            message_lines['tmf8821'] = ('ToF sensor blocked, pausing', False)
         else:
             # Valid distance measurement
             if floor_distance is None:
@@ -321,6 +321,8 @@ try:
 
     # Read charge percentage from battery monitor
     battery_percentage = LC709203F(i2c).cell_percent
+    if DEBUG:
+        print(f'Battery percentage: {battery_percentage}')
 
     # Disable power to I2C bus
     i2c_power.switch_to_input()
@@ -501,6 +503,6 @@ try:
     alarm.exit_and_deep_sleep_until_alarms(timeout_alarm, left_alarm, middle_alarm)
     # We will never get *here* -> timeout will force a restart and execute code from the top
 finally:
-    #except BufferError as e:
-    #print(e)
+    # except BufferError as e:
+    # print(e)
     pass
