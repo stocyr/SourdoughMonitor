@@ -339,3 +339,4 @@ cython_debug/
 
 
 /*.csv
+CIRCUITPYTHON/calibration/*

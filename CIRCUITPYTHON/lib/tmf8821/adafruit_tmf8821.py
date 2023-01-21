@@ -37,10 +37,9 @@ Implementation Notes
 __version__ = "1.0.0+auto.0"
 
 from collections import namedtuple
-from pathlib import Path
 from time import sleep
+from os import mkdir
 
-import yaml
 from adafruit_bus_device import i2c_device
 from adafruit_ticks import ticks_ms, ticks_add, ticks_less, ticks_diff
 from micropython import const
@@ -476,11 +475,10 @@ class TMF8821:
 
 
     def _factory_calibration(self, timeout_s=0.5, iterations=4e6) -> bytes:
+        iterations_before = self.config.iterations
         self.config.iterations = iterations
         self.write_configuration()
         # Initiate factory calibration
-        print('started factory calib')
-        t_start = ticks_ms()
         self._write_app_command(_TMF882X_APP_CMD_FACTORY_CALIBRATION)
         # Wait for successful termination
         self._check_app_cmd_executed(verbose=True, timeout_ms=int(timeout_s * 1000))
@@ -488,19 +486,20 @@ class TMF8821:
         factory_calibration_status = self._read_byte(_TMF882X_REG_CALIBRATION_STATUS_FC)
         if factory_calibration_status != 0x00:
             raise RuntimeError(f'Factory calibration ended with error {factory_calibration_status:x}')
-
-        print(f'Calibration took {ticks_diff(t_start, ticks_ms())} ms.\nNow loading calibration page')
         # Load calibration page
-        t_start = ticks_ms()
         self._write_app_command(_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_FACTORY_CALIB)
         self._check_app_cmd_executed(timeout_ms=50)
-        print(f'Page loading took {ticks_diff(t_start, ticks_ms())} ms.\nNow reading')
         # Read factory calibration page
         raw_page = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, _TMF882X_CALIBRATION_PAGE_SIZE + 4)
         page_content, _, *size = raw_page[:4]
         size = size[0] + (size[1] << 8)
         if not (page_content == _TMF882X_CALIBRATION_COMMON_CID and size == _TMF882X_CALIBRATION_PAGE_SIZE):
             raise Exception('Error loading factory calibration page')
+
+        # Restore iterations settings from before calibration
+        self.config.iterations = iterations_before
+        self.write_configuration()
+
         return raw_page[4:]
 
 
@@ -508,58 +507,48 @@ class TMF8821:
         return f'{self.config.spad_map}_{self.active_range}'
 
 
-    def store_factory_calibration(self, calib_file: Path = 'calibration/tmf8821_calibration.yaml', **kwargs) -> bytes:
-        configuration_key = self.calibration_config_key()
+    def store_factory_calibration(self, calib_folder: str = 'calibration', **kwargs) -> bytes:
+        if not calib_folder.endswith('/'):
+            calib_folder += '/'
+        configuration_filename = self.calibration_config_key()
         calibration_data = self._factory_calibration(**kwargs)
         # First try to load existing one
-        existing_calib = {}
-        if calib_file.exists():
-            with open(calib_file, 'r') as f:
-                existing_calib.update(yaml.full_load(f))
-        else:
-            calib_file.parent.mkdir(parents=True, exist_ok=True)
-        existing_calib[configuration_key] = calibration_data
-        with open(calib_file, 'w') as f:
-            yaml.dump(f, existing_calib)
+        mkdir(calib_folder)
+        with open(calib_folder + configuration_filename, 'wb') as f:
+            f.write(calibration_data)
         return calibration_data
 
 
-    def load_factory_calibration(self, calib_file: Path = 'calibration/tmf8821_calibration.yaml') -> bytes:
+    def load_factory_calibration(self, calib_folder: str = 'calibration/') -> bytes:
+        if not calib_folder.endswith('/'):
+            calib_folder += '/'
         # We assume the factory calibration should be loaded using the currently active configuration.
-        calibration_config_key = self.calibration_config_key()
+        configuration_filename = self.calibration_config_key()
         # Load the calibration from a file
         try:
-            with open(calib_file, 'r') as f:
-                existing_calib = yaml.full_load(f)
-            valid_calibration = existing_calib[calibration_config_key]
-        except FileNotFoundError:
-            raise RuntimeError(f'Calibration file "{calib_file}" doesn\'t exist')
-        except KeyError:
-            raise RuntimeError(f'No calibration for configuration {calibration_config_key} exists in {calib_file}.\n'
-                               f'Existing configurations: {", ".join(existing_calib.keys())}')
-        assert len(valid_calibration) == _TMF882X_CALIBRATION_PAGE_SIZE, 'Calibration size doesn\'t match 0xBC'
-
+            with open(calib_folder + configuration_filename, 'rb') as f:
+                calibration_data = f.read()
+        except Exception:
+            raise RuntimeError(f'Calibration file "{calib_folder + configuration_filename}" doesn\'t exist')
+        assert len(calibration_data) == _TMF882X_CALIBRATION_PAGE_SIZE, 'Calibration size doesn\'t match 0xBC'
         # Load the factory calibration page
         self._write_app_command(_TMF882X_APP_CMD_LOAD_CONFIG_PAGE_FACTORY_CALIB)
         self._check_app_cmd_executed()
-
         # Check that the configuration page is loaded
         page_content, _, *size = self._read_bytes(_TMF882X_REG_CONFIG_RESULT, 4)
         size = size[0] + (size[1] << 8)
         if not (page_content == _TMF882X_CALIBRATION_COMMON_CID and size == _TMF882X_CALIBRATION_PAGE_SIZE):
             raise Exception('Error loading calibration page')
-
         # Write the stored calibration data to 0x24, 0x25, … 0xDF.
-        self._write_bytes(_TMF882X_REG_FACTORY_CALIBRATION_FIRST, valid_calibration)
-
+        self._write_bytes(_TMF882X_REG_FACTORY_CALIBRATION_FIRST, calibration_data)
         # Write back the calibration data
         self._write_app_command(_TMF882X_APP_CMD_WRITE_CONFIG_PAGE)
         self._check_app_cmd_executed()
-
-        factory_calibration_status = self._read_byte(_TMF882X_REG_CALIBRATION_STATUS)
-        if factory_calibration_status != 0x00:
-            raise RuntimeError(f'Factory calibration status: {factory_calibration_status:x}')
-        return valid_calibration
+        # Note: this is only returning valid values once a measurement is started
+        # factory_calibration_status = self._read_byte(_TMF882X_REG_CALIBRATION_STATUS)
+        # if factory_calibration_status != 0x00:
+        #     raise RuntimeError(f'Factory calibration status: {factory_calibration_status:x}')
+        return calibration_data
 
 
     def _read_byte(self, address: int) -> int:
