@@ -70,6 +70,37 @@ class PlotType:
     temp = 2
 
 
+def read_latest_data_file() -> list:
+    import os
+    import sdcardio
+    import storage
+    array = []
+    #    try:
+    with busio.SPI(board.SCK, board.MOSI, board.MISO) as spi:
+        sd_cd = board.D5
+        sd = sdcardio.SDCard(spi, sd_cd)
+        vfs = storage.VfsFat(sd)
+        storage.mount(vfs, '/sd', readonly=True)
+
+        files = os.listdir('/sd')
+        data_files = [f for f in files if f.startswith('data_') and f.endswith('.csv')]
+        if data_files:
+            latest_number = int(sorted(data_files, reverse=True)[0][5:8])
+            # Read growth values into arrays
+            with open(f'/sd/data_{latest_number:03d}.csv', 'r') as file:
+                for line in file.readlines():
+                    growth, temp = line.split(',')
+                    try:
+                        array.append(float(growth))
+                    except Exception:
+                        pass
+        # Close SD card connection
+        storage.umount(vfs)
+    #    except Exception:
+    #        pass
+    return array
+
+
 def read_board_environment(i2c_device: busio.I2C):
     bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c_device)
     bme280.mode = adafruit_bme280.MODE_FORCE
