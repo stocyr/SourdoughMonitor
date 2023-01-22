@@ -180,7 +180,7 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
     group.append(bitmap_label.Label(font_bold, color=BLACK, text=growth, x=187, y=text_line1_y))
     if peak_percentage is not None:
         # Label for ago hour
-        group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{peak_hours:.1f} h', x=140, y=text_line2_y))
+        group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{peak_hours:.1f}h', x=140, y=text_line2_y))
         # Label for ago: text
         group.append(bitmap_label.Label(font_normal, color=DARK, text='ago:', x=167, y=text_line2_y))
         # Label for growth during peak
@@ -349,7 +349,7 @@ try:
             pausing = True
             if DEBUG:
                 print(f'Lid sits on a surface')
-            message_lines['tmf8821'] = ('ToF sensor blocked, pausing', False)
+            message_lines['height_calibration'] = ('Distance sensor blocked, pausing', False)
         else:
             # Valid distance measurement
             if floor_distance is None:
