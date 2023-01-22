@@ -54,6 +54,7 @@ from utils.eink_constants import PaletteColor
 from utils.graph_plot import GraphPlot
 from utils.sleep_memory import CyclicBuffer, Cyclic16BitTempBuffer, Cyclic16BitPercentageBuffer, SingleIntMemory
 from utils.battery_widget import BatteryWidget, BLACK, DARK, WHITE
+from utils.algorithm import peak_detect
 
 rgb_led.deinit()
 
@@ -132,7 +133,6 @@ def read_external_environment(i2c_device: busio.I2C):
 
 
 def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> float:
-    mean_distance = None
     try:
         tof = TMF8821(i2c_device)
         tof.config.iterations = 3.5e6
@@ -267,27 +267,40 @@ try:
 
     plot_type = plot_type_mem.value
     plot_zoomed = zoom_mem.value
+    floor_distance = floor_distance_mem.value
     start_height = start_height_mem.value
 
     # Look up if a floor calibration file is present
-    try:
-        with open('calibration/floor.txt', 'r') as f:
-            floor_distance = int(float(f.read()))
-            floor_distance_mem.value = floor_distance
-            if DEBUG:
-                print(f'Floor distance was loaded from file to {floor_distance / 10:.1f}cm')
-            message_lines['tmf8821'] = (f'Floor distance from file {floor_distance / 10:.1f}cm ', False)
-    except Exception:
-        floor_distance = floor_distance_mem.value
+    if floor_distance is None:
+        try:
+            with open('calibration/floor.txt', 'r') as f:
+                floor_distance = int(float(f.read()))
+                floor_distance_mem.value = floor_distance
+                if DEBUG:
+                    print(f'Floor distance was loaded from file to {floor_distance / 10:.1f}cm')
+                message_lines['tmf8821'] = (f'Floor distance from file {floor_distance / 10:.1f}cm ', False)
+        except Exception:
+            pass
 
     # Mockup mode
     if wake_reason == 'reset' and right_button_pressed:
         # Right button pressed during reset startup: mockup mode
-        # TODO: change to empty the plots --> at least the height...
-        temp_mem.fill_randomly(19.0, 29.0)
-        growth_mem.fill_randomly(100.0, 150.0)
-        if DEBUG:
-            print('Filled both buffers with mock values')
+        growth_array = read_latest_data_file()
+        if growth_array:
+            # Try to find the latest file on the SD card and replay it
+            growth_mem.make_empty()
+            for val in growth_array:
+                growth_mem.add_value(val)
+            if DEBUG:
+                print(f'Filled growth buffer with {len(growth_array)} values from SD card')
+            message_lines['tmf8821'] = (f'{len(growth_array)} growth values loaded from SD card', False)
+        else:
+            # Otherwise, fill randomly
+            temp_mem.fill_randomly(19.0, 29.0)
+            growth_mem.fill_randomly(100.0, 150.0)
+            if DEBUG:
+                print('Filled both buffers with mock values')
+            message_lines['tmf8821'] = (f'Growth and temp randomized', False)
     if DEBUG:
         print(f'Buffers: {growth_mem.current_size}, {temp_mem.current_size}')
 
@@ -308,7 +321,6 @@ try:
         time.sleep(DEBUG_DELAY)
 
     # Read inside temperature and humidity from AM2320 sensor
-    # TODO: let the exception pass through, then print a message if sensor problem
     ext_temp, ext_humidity = read_external_environment(i2c)
     if ext_temp is not None:
         temp_mem.add_value(ext_temp)
@@ -420,9 +432,19 @@ try:
             zoom_mem.value = new_plot_zoomed
             plot_zoomed = new_plot_zoomed
 
+    # Add current growth percentage to buffer
+    if floor_distance is not None and start_height is not None and growth_percentage is not None and not pausing:
+        growth_mem.add_value(growth_percentage)
+    # Perform peak search
+    growth_array = growth_mem.read_array()
+    peak_ind = peak_detect(growth_array, threshold=1.0, window_size=7)
+    peak_percentage = None
+    peak_hours = None
+    if peak_ind is not None:
+        peak_percentage = growth_array[peak_ind]
+        peak_hours = (len(growth_array) - peak_ind - 1) * 3 / 60
     if DEBUG:
-        print("battery monitor initialized.")
-        time.sleep(DEBUG_DELAY)
+        print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
     # Initialize e-Ink display
     with busio.SPI(board.SCK, board.MOSI) as spi:
@@ -459,10 +481,6 @@ try:
             print('Display background drawn.')
             time.sleep(DEBUG_DELAY)
 
-        # TODO: calculate peak
-        peak_percentage = None
-        peak_hours = None
-
         draw_texts(g, tahoma_font, tahoma_bold_font, ext_temp, ext_humidity, board_temp, board_humidity,
                    growth_percentage, peak_percentage, peak_hours)
 
@@ -483,13 +501,6 @@ try:
             print("Battery symbol drawn.")
             time.sleep(DEBUG_DELAY)
 
-        # Add current growth percentage to buffer
-        if floor_distance is not None and start_height is not None and growth_percentage is not None and not pausing:
-            # TODO: always add value if we also add values to the temperature. but consider NaN in these cases
-            # - leave nan empty in plot -> if next value is NaN or current value is NaN, skip line
-            # - don't consider NaN in min/max calculation -> use either numpy or our own min/max implementation
-            growth_mem.add_value(growth_percentage)
-
         # Add the graph plot
         plot = GraphPlot(
             width=296, height=128, origin=(28, 116), top_right=(288, 35), font=tick_font, line_color=PaletteColor.black,
@@ -507,7 +518,7 @@ try:
 
         if value_array:
             # print(f'Value array: {",".join(map(str, value_array))}')
-            plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
+            plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on, peak_ind=peak_ind)
         g.append(plot)
 
         # Write message lines
@@ -515,7 +526,7 @@ try:
             message, emphasize = message_lines[key]
             if message != '':
                 color_fg, color_bg = (WHITE, BLACK) if emphasize else (BLACK, WHITE)
-                g.append(bitmap_label.Label(tahoma_bold_font, color=color_fg, text=message, x=75, y=y_pos,
+                g.append(bitmap_label.Label(tahoma_bold_font, color=color_fg, text=message, x=55, y=y_pos,
                                             background_color=color_bg))
 
         if DEBUG:

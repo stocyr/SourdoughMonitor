@@ -157,15 +157,15 @@ class GraphPlot(Widget):
 
     def _plot_line(self, data_array: list, advance: int = 1):
         # If we plot an even number of pixels thick, the line's center is offset by -0.5 pixel downward -> precorrect
-        compensate_even_thickness = (1 - (self.line_width % 2)) * 0.5 * self.data_range_with_margin_to_pixel_factor
-        current_pixel_value_y = self.y_data_to_pixel(data_array[0], compensate_even_thickness)
+        self.compensate_even_thickness = (1 - (self.line_width % 2)) * 0.5 * self.data_range_with_margin_to_pixel_factor
+        current_pixel_value_y = self.y_data_to_pixel(data_array[0], self.compensate_even_thickness)
         if self.alignment == 'right':
             current_pixel_value_x = self.top_right[0] - (len(data_array) - 1) * advance
         else:
             current_pixel_value_x = self.origin[0]
 
         for x_value in range(len(data_array) - 1):
-            next_pixel_value_y = self.y_data_to_pixel(data_array[x_value + 1], compensate_even_thickness)
+            next_pixel_value_y = self.y_data_to_pixel(data_array[x_value + 1], self.compensate_even_thickness)
             if self.alignment == 'fit':
                 next_pixel_value_x = round(self.origin[0] + (x_value + 1) * (self.graph_width - 1) / (len(data_array) -
                                                                                                       1))
@@ -194,13 +194,28 @@ class GraphPlot(Widget):
                       current_pixel_value_y + (self.line_width - 1) // 2)
 
 
-    def plot_graph(self, data_array: list, zoomed: bool = False, clear_first=False):
+    def _plot_peak(self, data_array: list, peak_ind: int, advance: int):
+        if peak_ind * advance < self.graph_width:
+            # Peak ind is not out of plot window
+            peak_y_val = data_array[peak_ind]
+            peak_y_pos = self.y_data_to_pixel(peak_y_val, self.compensate_even_thickness) - 1
+            assert self.alignment == 'right'
+            peak_x_pos = self.top_right[0] - (len(data_array) - 1) * advance + peak_ind * advance
+            # Draw triangle
+            for start_x, start_y, length in zip([0, -1, -1, -2, -2], [-1, -2, -3, -4, -5], [1, 3, 3, 5, 5]):
+                bitmaptools.draw_line(self._plot_bitmap, peak_x_pos + start_x, peak_y_pos + start_y,
+                                      peak_x_pos + start_x + length - 1, peak_y_pos + start_y, self.line_color)
+
+
+    def plot_graph(self, data_array: list, zoomed: bool = False, clear_first=False, peak_ind: int = None):
         if clear_first:
             self._plot_bitmap.fill(self.background_color)
 
         self._setup_yscale(data_array)
         self._draw_yticks_and_labels()
         self._plot_line(data_array, advance=2 if zoomed else 1)
+        if peak_ind is not None:
+            self._plot_peak(data_array, peak_ind, advance=2 if zoomed else 1)
 
 
 if __name__ == '__main__':
