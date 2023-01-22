@@ -121,9 +121,9 @@ def read_external_environment(i2c_device: busio.I2C):
     humidity = None
     try:
         am2320 = adafruit_am2320.AM2320(i2c_device)
-        time.sleep(0.1)
+        time.sleep(0.2)
         temperature = am2320.temperature
-        time.sleep(0.1)
+        time.sleep(0.2)
         humidity = am2320.relative_humidity
     except ValueError:
         # This is an external sensor -- maybe it wasn't attached?
