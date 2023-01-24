@@ -181,10 +181,12 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
     if peak_percentage is not None:
         # Label for ago hour
         group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{peak_hours:.1f}h', x=140, y=text_line2_y))
+        x_off = 0 if len(f'{peak_hours:.1f}h') <= 4 else 6
         # Label for ago: text
-        group.append(bitmap_label.Label(font_normal, color=DARK, text='ago:', x=167, y=text_line2_y))
+        group.append(bitmap_label.Label(font_normal, color=DARK, text='ago:', x=167 + x_off, y=text_line2_y))
         # Label for growth during peak
-        group.append(bitmap_label.Label(font_bold, color=BLACK, text=f'{peak_percentage:.0f}%', x=194, y=text_line2_y))
+        group.append(bitmap_label.Label(font_bold, color=BLACK, text=f'{peak_percentage:.0f}%', x=194 + x_off,
+                                        y=text_line2_y))
 
 
 def log_data_to_sd_card(floor_calib: int, start_calib: int, temp_buffer: CyclicBuffer, growth_buffer: CyclicBuffer):
@@ -438,11 +440,13 @@ try:
     # Perform peak search
     growth_array = growth_mem.read_array()
     peak_ind = peak_detect(growth_array, threshold=1.0, window_size=7)
+    peak_pos_in_history = None
     peak_percentage = None
     peak_hours = None
     if peak_ind is not None:
+        peak_pos_in_history = len(growth_array) - peak_ind - 1
         peak_percentage = growth_array[peak_ind]
-        peak_hours = (len(growth_array) - peak_ind - 1) * 3 / 60
+        peak_hours = peak_pos_in_history * 3 / 60
     if DEBUG:
         print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
@@ -518,7 +522,9 @@ try:
 
         if value_array:
             # print(f'Value array: {",".join(map(str, value_array))}')
-            plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on, peak_ind=peak_ind)
+            plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
+        if peak_pos_in_history is not None and plot_type == PlotType.growth:
+            plot.plot_peak(value_array, peak_pos_in_history, zoomed=plot_zoomed == Zoom.on)
         g.append(plot)
 
         # Write message lines

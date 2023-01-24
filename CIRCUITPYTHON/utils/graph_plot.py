@@ -194,19 +194,6 @@ class GraphPlot(Widget):
                       current_pixel_value_y + (self.line_width - 1) // 2)
 
 
-    def _plot_peak(self, data_array: list, peak_ind: int, advance: int):
-        if peak_ind * advance < self.graph_width:
-            # Peak ind is not out of plot window
-            peak_y_val = data_array[peak_ind]
-            peak_y_pos = self.y_data_to_pixel(peak_y_val, self.compensate_even_thickness) - 1
-            assert self.alignment == 'right'
-            peak_x_pos = self.top_right[0] - (len(data_array) - 1) * advance + peak_ind * advance
-            # Draw triangle
-            for start_x, start_y, length in zip([0, -1, -1, -2, -2], [-1, -2, -3, -4, -5], [1, 3, 3, 5, 5]):
-                bitmaptools.draw_line(self._plot_bitmap, peak_x_pos + start_x, peak_y_pos + start_y,
-                                      peak_x_pos + start_x + length - 1, peak_y_pos + start_y, self.line_color)
-
-
     def plot_graph(self, data_array: list, zoomed: bool = False, clear_first=False, peak_ind: int = None):
         if clear_first:
             self._plot_bitmap.fill(self.background_color)
@@ -214,8 +201,20 @@ class GraphPlot(Widget):
         self._setup_yscale(data_array)
         self._draw_yticks_and_labels()
         self._plot_line(data_array, advance=2 if zoomed else 1)
-        if peak_ind is not None:
-            self._plot_peak(data_array, peak_ind, advance=2 if zoomed else 1)
+
+
+    def plot_peak(self, data_array: list, peak_pos_in_history: int = None, zoomed: bool = False):
+        advance = 2 if zoomed else 1
+        if peak_pos_in_history * advance + 1 < self.graph_width:
+            # Peak ind is not out of plot window
+            peak_y_val = data_array[-1 - peak_pos_in_history]
+            peak_y_pos = self.y_data_to_pixel(peak_y_val, self.compensate_even_thickness) - 1
+            assert self.alignment == 'right'
+            peak_x_pos = self.top_right[0] - peak_pos_in_history * advance
+            # Draw triangle
+            for start_x, start_y, length in zip([0, -1, -1, -2, -2], [-1, -2, -3, -4, -5], [1, 3, 3, 5, 5]):
+                bitmaptools.draw_line(self._plot_bitmap, peak_x_pos + start_x, peak_y_pos + start_y,
+                                      peak_x_pos + start_x + length - 1, peak_y_pos + start_y, self.line_color)
 
 
 if __name__ == '__main__':
