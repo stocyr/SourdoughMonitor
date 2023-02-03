@@ -310,12 +310,9 @@ Seen from the top (sensor below the PCB) and with the holes on the lower side, t
 | 9  8  7 |
 +---------+
 
-# Open TODOs
+# Open Issues
 
-- [ ] Peak detection and marking
+- [ ] If temperature indicates staying in refrigerator, skip 2/3 display refreshes
+- [ ] Halt problem if start height is lower than floor height (where?)
 - [ ] Check accuracy of 1x vs 5x oversampling --> test with sourdough surface
 - [ ] Measure current -- toggle lines to drive eInk low
-
-New roadmap:
-
-- check timing of appid on page 42 or 46

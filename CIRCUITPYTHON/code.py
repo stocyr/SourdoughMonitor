@@ -116,13 +116,17 @@ def read_board_environment(i2c_device: busio.I2C):
     return temperature, humidity
 
 
-def read_external_environment(i2c_device: busio.I2C):
+def read_external_environment(i2c_device: busio.I2C, retry_temp=3, temp_invalid=0):
     temperature = None
     humidity = None
     try:
         am2320 = adafruit_am2320.AM2320(i2c_device)
-        time.sleep(0.2)
+        time.sleep(0.3)
         temperature = am2320.temperature
+        while temperature == temp_invalid and retry_temp > 0:
+            time.sleep(0.2)
+            temperature = am2320.temperature
+            retry_temp -= 1
         time.sleep(0.2)
         humidity = am2320.relative_humidity
     except ValueError:
