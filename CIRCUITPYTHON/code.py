@@ -342,7 +342,7 @@ try:
 
     # Handle distance and calibrations
     growth_percentage = None
-    dought_height = None
+    dough_height = None
     pausing = False
     if current_distance is None:
         if DEBUG:
@@ -365,7 +365,7 @@ try:
                 message_lines['tmf8821'] = (' Floor distance not calibrated ', True)
             else:
                 # Floor height was calibrated
-                dought_height = floor_distance - current_distance
+                dough_height = floor_distance - current_distance
                 if start_height is None:
                     # Start height wasn't calibrated yet
                     if DEBUG:
@@ -373,10 +373,10 @@ try:
                     message_lines['height_calibration'] = (' Start height not calibrated ', True)
                 else:
                     # Start height calibrated
-                    growth_percentage = dought_height / start_height * 100
+                    growth_percentage = dough_height / start_height * 100
                     if DEBUG:
                         print(f'Floor: {floor_distance / 10:.1f}cm, Start height: {start_height / 10:.1f}cm, ', end='')
-                        print(f'Current height: {dought_height / 10:.1f}cm, Growth: {growth_percentage:.2f}%')
+                        print(f'Current height: {dough_height / 10:.1f}cm, Growth: {growth_percentage:.2f}%')
 
     # Read charge percentage from battery monitor
     battery_percentage = LC709203F(i2c).cell_percent
