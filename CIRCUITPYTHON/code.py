@@ -536,7 +536,8 @@ try:
             message, emphasize = message_lines[key]
             if message != '':
                 color_fg, color_bg = (WHITE, BLACK) if emphasize else (BLACK, WHITE)
-                g.append(bitmap_label.Label(tahoma_bold_font, color=color_fg, text=message, x=55, y=y_pos,
+                font = tahoma_bold_font if emphasize else tahoma_font
+                g.append(bitmap_label.Label(font, color=color_fg, text=message, x=55, y=y_pos,
                                             background_color=color_bg))
 
         if DEBUG:
