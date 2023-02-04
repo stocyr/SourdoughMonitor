@@ -169,19 +169,20 @@ def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp
     in_temp = '-' if ext_temp is None else f'{ext_temp:.1f}°C'
     group.append(bitmap_label.Label(font_bold, color=BLACK, text=in_temp, x=28, y=text_line2_y))
     # Label for in humidity
-    if ext_humidity is not None:
-        group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{ext_humidity:.0f}%rh', x=78, y=text_line2_y))
+    # if ext_humidity is not None:
+    #    group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{ext_humidity:.0f}%rh', x=78, y=text_line2_y))
     # Label for out: text
     group.append(bitmap_label.Label(font_normal, color=DARK, text='out:', x=2, y=text_line1_y))
     # Label for board temperature
     group.append(bitmap_label.Label(font_bold, color=DARK, text=f'{board_temp:.1f}°C', x=28, y=text_line1_y))
     # Label for board humidity
-    group.append(bitmap_label.Label(font_normal, color=DARK, text=f'{board_humidity:.0f}%rh', x=78, y=text_line1_y))
-    # Label for growth: text
-    group.append(bitmap_label.Label(font_normal, color=DARK, text='Growth:', x=140, y=text_line1_y))
-    # Label for growth percentage
-    growth = '-' if growth_percentage is None else f'{growth_percentage:.0f}%'
-    group.append(bitmap_label.Label(font_bold, color=BLACK, text=growth, x=187, y=text_line1_y))
+    # group.append(bitmap_label.Label(font_normal, color=DARK, text=f'{board_humidity:.0f}%rh', x=78, y=text_line1_y))
+    if growth_percentage is not None:
+        # Label for growth: text
+        group.append(bitmap_label.Label(font_normal, color=DARK, text='Growth:', x=140, y=text_line1_y))
+        # Label for growth percentage
+        group.append(bitmap_label.Label(font_bold, color=BLACK, text=f'{growth_percentage:.0f}%', x=187,
+                                        y=text_line1_y))
     if peak_percentage is not None:
         # Label for ago hour
         group.append(bitmap_label.Label(font_normal, color=BLACK, text=f'{peak_hours:.1f}h', x=140, y=text_line2_y))
