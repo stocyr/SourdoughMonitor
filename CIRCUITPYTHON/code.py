@@ -12,6 +12,8 @@ BOOT_TIME = 1.3  # second
 GRAPH_WIDTH = 261  # pixel
 DEBUG = True
 DEBUG_DELAY = 0.0
+FRIDGE_SLEEP_TIME_FACTOR = 3
+FRIDGE_MAX_TEMP = 10
 # =======================================================
 
 from math import sqrt, floor, ceil
@@ -444,7 +446,7 @@ try:
             plot_zoomed = new_plot_zoomed
 
     # Add current growth percentage to buffer
-    if floor_distance is not None and start_height is not None and growth_percentage is not None and not pausing:
+    if growth_percentage is not None:
         growth_mem.add_value(growth_percentage)
     # Perform peak search
     growth_array = growth_mem.read_array()
@@ -565,10 +567,24 @@ try:
         print("Setting up deep sleep.")
         time.sleep(DEBUG_DELAY)
 
-    # If a button was pressed, we assume that the interruption in average occurs after 1.5 min
-    # --> wait for 4.5 min to compensate for the early interrupt (we aim at a constant sampling frequency of 3 min)
-    next_alarm = 3 * 60 if wake_reason not in ['left', 'middle'] else 4.5 * 60
-    timeout_alarm = alarm.time.TimeAlarm(monotonic_time=t_start - BOOT_TIME + 3 * 60)
+    sleep_time = 3 * 60
+    # If in refrigerator, update everything slower
+    if ext_temp is not None and ext_temp < FRIDGE_MAX_TEMP:
+        sleep_time *= FRIDGE_SLEEP_TIME_FACTOR
+        # To compensate for the x-axis tick distance of 3 min, duplicate the value in the memory
+        for _ in range(FRIDGE_SLEEP_TIME_FACTOR - 1):
+            if growth_percentage is not None:
+                growth_mem.add_value(growth_percentage)
+            if ext_temp is not None:
+                temp_mem.add_value(ext_temp)
+
+    # If a button was pressed, we assume that the interruption in average occurs after 1/2 of the sleep time
+    if wake_reason in ['left', 'middle']:
+        # --> wait for 1.5x time to compensate for the early interrupt
+        # (we aim at a constant sampling frequency of 3 min)
+        sleep_time *= 1.5
+
+    timeout_alarm = alarm.time.TimeAlarm(monotonic_time=t_start - BOOT_TIME + sleep_time)
     left_alarm = alarm.pin.PinAlarm(pin=board.D11, value=False, pull=True)
     middle_alarm = alarm.pin.PinAlarm(pin=board.D12, value=False, pull=True)
 
