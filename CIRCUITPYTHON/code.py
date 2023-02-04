@@ -119,20 +119,18 @@ def read_board_environment(i2c_device: busio.I2C):
 def read_external_environment(i2c_device: busio.I2C, retry_temp=3, temp_invalid=0):
     temperature = None
     humidity = None
-    try:
-        am2320 = adafruit_am2320.AM2320(i2c_device)
-        time.sleep(0.3)
-        temperature = am2320.temperature
-        while temperature == temp_invalid and retry_temp > 0:
-            time.sleep(0.2)
+    while (temperature is None or temperature == temp_invalid) and retry_temp > 0:
+        try:
+            am2320 = adafruit_am2320.AM2320(i2c_device)
+            time.sleep(0.3)
             temperature = am2320.temperature
-            retry_temp -= 1
-        time.sleep(0.2)
-        humidity = am2320.relative_humidity
-    except ValueError:
-        # This is an external sensor -- maybe it wasn't attached?
-        if DEBUG:
-            print(f'External sensor not readable!')
+            time.sleep(0.2)
+            humidity = am2320.relative_humidity
+        except ValueError:
+            # This is an external sensor -- maybe it wasn't attached?
+            if DEBUG:
+                print(f'External sensor not readable!')
+        retry_temp -= 1
     return temperature, humidity
 
 
@@ -427,7 +425,7 @@ try:
                     start_height_mem.value = start_height_floored
                     start_height = start_height_floored
                     message_lines['height_calibration'] = (
-                    f'Start height calib {start_height_floored / 10:.1f}cm', False)
+                        f'Start height calib {start_height_floored / 10:.1f}cm', False)
                     if floor_distance is not None:
                         # Right after calibration is complete, the first reading must be 100%
                         growth_percentage = 100.0
