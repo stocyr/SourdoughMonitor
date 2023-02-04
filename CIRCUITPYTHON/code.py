@@ -418,18 +418,24 @@ try:
     elif wake_reason == 'middle':
         if middle_button_pressed:
             # Middle button pressed --> calibrate height
-            if dought_height is not None:
-                start_height_floored = int(floor(dought_height))
-                if DEBUG:
-                    print(f'Start height was reset to {dought_height / 10:.1f}cm')
-                start_height_mem.value = start_height_floored
-                start_height = start_height_floored
-                message_lines['height_calibration'] = (f'Start height calib {start_height_floored / 10:.1f}cm', False)
-                if floor_distance is not None:
-                    # Right after calibration is complete, the first reading must be 100%
-                    growth_percentage = 100.0
-                    # Also clear growth mem
-                    growth_mem.make_empty()
+            if dough_height is not None:
+                if dough_height > 0:
+                    start_height_floored = int(floor(dough_height))
+                    if DEBUG:
+                        print(f'Start height was reset to {dough_height / 10:.1f}cm')
+                    start_height_mem.value = start_height_floored
+                    start_height = start_height_floored
+                    message_lines['height_calibration'] = (
+                    f'Start height calib {start_height_floored / 10:.1f}cm', False)
+                    if floor_distance is not None:
+                        # Right after calibration is complete, the first reading must be 100%
+                        growth_percentage = 100.0
+                        # Also clear growth mem
+                        growth_mem.make_empty()
+                else:
+                    if DEBUG:
+                        print(f'Start height {dough_height / 10:.1f}cm is lower than floor height {floor_distance}mm')
+                    message_lines['height_calibration'] = ('Start height < floor height!', True)
         else:
             # Middle button clicked --> toggle plot zoom
             new_plot_zoomed = 3 - plot_zoomed
