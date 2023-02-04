@@ -24,7 +24,7 @@ def get_font_height(font, scale: int):
 class GraphPlot(Widget):
     ytick_margin_percentage = 1.025
     ytick_height_separation_factor = 1.8
-    ytick_mantissa_steps = [2.0, 2.5, 5.0, 10.0]
+    ytick_mantissa_steps = [2.0, 5.0, 10.0]
     yticks_length = 2
 
 
