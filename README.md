@@ -1,13 +1,16 @@
 SourdoughMonitor
 ================
+
 Sourdough monitoring system with an ESP32 feather board, a ToF distance sensor and onboard temperature/humidity sensors.
+
+![collage.jpg](imgs%2Fcollage.jpg)
 
 Setup
 -----
 
 ### Hardware
 
-![](imgs/adafruit_products_Adafruit_Feather_ESP32-S2_Pinout.png)
+![](pcb/adafruit_products_Adafruit_Feather_ESP32-S2_Pinout.png)
 
 We use the [ESP32-S2 with BME280](https://circuitpython.org/board/adafruit_feather_esp32s2_bme280/).
 
@@ -41,7 +44,7 @@ the schematic can be downloaded [here](https://learn.adafruit.com/assets/109937)
 
 ### Programming Language
 
-We work with Python, specifically CircuitPython 7.3.2.
+We work with Python 3.9, specifically CircuitPython 7.3.2.
 
 ### IDE
 
@@ -93,6 +96,8 @@ onboard LED.
 
 Usage
 -----
+
+_Coming soon_
 
 
 Further reading
