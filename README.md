@@ -5,6 +5,7 @@ Sourdough monitoring system with an ESP32 feather board, a ToF distance sensor a
 
 ![collage](doc/collage.jpg)
 
+
 Setup
 -----
 
@@ -83,17 +84,38 @@ We work with a bunch of pre-existing libraries for use of the periphery devices,
 Note that there was no Python library for the TMF882X device family. Thus, we developed our own library, accessible in [`CIRCUITPYTHON/lib/tmf8821`](CIRCUITPYTHON/lib/tmf8821).
 
 
-Calibration
------------
+Usage
+-----
 
-### TMF8821
+![getting_started_guide](doc/getting_started.png)
+
+The sensors and display updates happen every 3 minutes and the monitor goes to deep sleep mode between the updates. Whenever a button is pressed, the next sleep time is 1.5x the usual interval to account for interruption of an average of 0.5x the sleep time.
+
+The battery lasts about 2-3 weeks. If the monitor is in the refrigerator (the external temperature sensor reads less than 10°C), the monitor is in power-safe mode and the sensors and display updates only happen every 9 minutes.
+
+Holding a button means pressing it for at least 3.5 seconds, or until the blue LED on the ESP32 PCB light up. 
+
+The recorded curves on the MicroSD card can be plotted using the scripts in [`release_tests/v1.1`](release_tests/v1.1).
+Some of the growth curves look like this:
+
+![](doc/growth.png)
+
+
+### Calibration of the TMF8821
 
 For a new hardware setup, the cross talk of the TMF8821 should be calibrated to guarantee the best possible accuracy. This can be done using the script in [`experiments/distance/code4.py`](experiments/distance/code4.py) (uncomment line 44). The calibration data must then be written in byte format to a file named *"<config_spad_map>_<active_range>"* (e.g. *"3x3_normal_mode_short"*) in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibraion).
 
 
-### Preconfigure the container floor
+### Container floor preconfiguration
 
 If there is always a container with the same height being used, it makes sense to only calibrate the floor once and write the distance in millimeters (just the number, no unit) to a file *"floor.txt"* in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibration).
+
+
+### Trouble Shooting
+
+If an exception occurred, the CircuitPython OS will flash the red LED on the ESP32 PCB 2x every 5 second.
+In this case, the error message and traceback has been stored to the SD card in a file called _"exception_traceback.txt"_.
+Moreover, if the USB-C cable is connected, debug messages are printed over the virtual serial port.
 
 
 Hardware Limitations
@@ -101,22 +123,6 @@ Hardware Limitations
 
 We don't want to use Button C on the eInk display since pulling it high would result in a constant current through the
 onboard LED.
-
-
-Usage
------
-
-![getting_started_guide](doc/getting_started.png)
-
-
-The sensors and display updates happen every 3 minutes and the monitor goes to deep sleep mode between the updates. Whenever a button is pressed, the next sleep time is 1.5x the usual interval to account for interruption of an average of 0.5x the sleep time.
-
-The battery lasts about 2-3 weeks. If the monitor is in the refridgerator (the external temperature sensor reads less than 10°C), the monitor is in power-safe mode and the sensors and display updates only happen every 9 minutes.
-
-Further reading
----------------
-
-https://github.com/todbot/circuitpython-tricks
 
 
 Similar Projects
