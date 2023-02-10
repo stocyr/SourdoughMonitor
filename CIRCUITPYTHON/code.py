@@ -617,4 +617,5 @@ except Exception as e:
     exc_string = log_exception_to_sd_card(e)
     if DEBUG:
         print(exc_string)
+    raise e
     
