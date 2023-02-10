@@ -312,6 +312,5 @@ Seen from the top (sensor below the PCB) and with the holes on the lower side, t
 
 # Open Issues
 
-- [ ] Halt problem if start height is lower than floor height (where?)
 - [ ] Check accuracy of 1x vs 5x oversampling --> test with sourdough surface
 - [ ] Measure current -- toggle lines to drive eInk low

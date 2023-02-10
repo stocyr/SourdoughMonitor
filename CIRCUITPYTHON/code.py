@@ -238,6 +238,29 @@ def log_data_to_sd_card(floor_calib: int, start_calib: int, temp_buffer: CyclicB
             print(f'Couldn\'t write to SD card: {e}')
 
 
+def log_exception_to_sd_card(exc):
+    import os
+    import traceback
+    import sdcardio
+    import storage
+    exc_string = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    try:
+        with busio.SPI(board.SCK, board.MOSI, board.MISO) as spi:
+            sd_cd = board.D5
+            sd = sdcardio.SDCard(spi, sd_cd)
+            vfs = storage.VfsFat(sd)
+            storage.mount(vfs, '/sd')
+
+            with open(f'/sd/exception_traceback.txt', 'w') as file:
+                file.write(exc_string)
+            # Close SD card connection and safely unmount
+            sd.sync()
+            storage.umount(vfs)
+    except:
+        pass
+    return exc_string
+
+
 # ===================== MAIN CODE =======================
 
 try:
@@ -436,7 +459,7 @@ try:
                 else:
                     if DEBUG:
                         print(f'Start height {dough_height / 10:.1f}cm is lower than floor height {floor_distance}mm')
-                    message_lines['height_calibration'] = ('Start height < floor height!', True)
+                    message_lines['height_calibration'] = ('Start height lower than floor height', True)
         else:
             # Middle button clicked --> toggle plot zoom
             new_plot_zoomed = 3 - plot_zoomed
@@ -590,7 +613,8 @@ try:
 
     alarm.exit_and_deep_sleep_until_alarms(timeout_alarm, left_alarm, middle_alarm)
     # We will never get *here* -> timeout will force a restart and execute code from the top
-finally:
-    # except BufferError as e:
-    # print(e)
-    pass
+except Exception as e:
+    exc_string = log_exception_to_sd_card(e)
+    if DEBUG:
+        print(exc_string)
+    
