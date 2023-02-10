@@ -3,14 +3,14 @@ SourdoughMonitor
 
 Sourdough monitoring system with an ESP32 feather board, a ToF distance sensor and onboard temperature/humidity sensors.
 
-![collage.jpg](imgs%2Fcollage.jpg)
+![collage](doc/collage.jpg)
 
 Setup
 -----
 
 ### Hardware
 
-![](pcb/adafruit_products_Adafruit_Feather_ESP32-S2_Pinout.png)
+![](doc/block_schema.png)
 
 We use the [ESP32-S2 with BME280](https://circuitpython.org/board/adafruit_feather_esp32s2_bme280/).
 
@@ -29,9 +29,9 @@ Attached to it are the following devices:
 - **AM2320** external temperature and humidity sensor on i2c address `0x5c`
   . [Datasheet](https://akizukidenshi.com/download/ds/aosong/AM2320.pdf)
   , [Product](https://shop.pimoroni.com/products/digital-temperature-and-humidity-sensor?variant=35611648138)
-- **Zio OLED** 1.5" display with 128x128 pixel for debugging on i2c address `0x3c`
+- **Zio OLED** [only for debugging] 1.5" display with 128x128 pixel for debugging on i2c address `0x3c`
   . [Link](https://learn.adafruit.com/adafruit-grayscale-1-5-128x128-oled-display)
-- **U132** passive buzzer for signalling on GPIO pin <tbd>
+- **U132** [only for debugging] passive buzzer for signalling on a GPIO pin
   . [Schematic](https://cdn.shopify.com/s/files/1/0174/1800/products/buzzer_sch_01_1500x1500.jpg?v=1640774058)
   , [Product](https://shop.pimoroni.com/products/passive-buzzer-unit?variant=39618442297427)
 - **LC709203** on-board LiPo battery monitor on i2c address `0x0b`
@@ -74,18 +74,27 @@ completion):
 - `adafruit-circuitpython-typing` for datatype description in TMF882X driver
 - `circuitpython-displayio-cartesian` for plotting on the display
 
+
 Libraries
 ---------
 
-To install the backend libraries for use of the periphery devices, the following files must be copies into the `/lib`
-folder of the CIRCUITPYTHON volume (
-from [here](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220904)):
+We work with a bunch of pre-existing libraries for use of the periphery devices, most of them from [here](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220904)). They are copied on the CIRCUITPYTHON volume and reside in the  [`CIRCUITPYTHON/lib`](CIRCUITPYTHON/lib) folder.
 
-- `adafruit_ssd1327.mpy`
-- `adafruit_display_text/` folder
-- `simpleio.mpy` (for PWM on the buzzer pin)
-- `neopixel.mpy`
-- `adafruit_ticks.mpy` (for millisecond time measurement)
+Note that there was no Python library for the TMF882X device family. Thus, we developed our own library, accessible in [`CIRCUITPYTHON/lib/tmf8821`](CIRCUITPYTHON/lib/tmf8821).
+
+
+Calibration
+-----------
+
+### TMF8821
+
+For a new hardware setup, the cross talk of the TMF8821 should be calibrated to guarantee the best possible accuracy. This can be done using the script in [`experiments/distance/code4.py`](experiments/distance/code4.py) (uncomment line 44). The calibration data must then be written in byte format to a file named *"<config_spad_map>_<active_range>"* (e.g. *"3x3_normal_mode_short"*) in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibraion).
+
+
+### Preconfigure the container floor
+
+If there is always a container with the same height being used, it makes sense to only calibrate the floor once and write the distance in millimeters (just the number, no unit) to a file *"floor.txt"* in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibration).
+
 
 Hardware Limitations
 --------------------
@@ -97,10 +106,25 @@ onboard LED.
 Usage
 -----
 
-_Coming soon_
+![getting_started_guide](doc/getting_started.png)
 
+
+The sensors and display updates happen every 3 minutes and the monitor goes to deep sleep mode between the updates. Whenever a button is pressed, the next sleep time is 1.5x the usual interval to account for interruption of an average of 0.5x the sleep time.
+
+The battery lasts about 2-3 weeks. If the monitor is in the refridgerator (the external temperature sensor reads less than 10°C), the monitor is in power-safe mode and the sensors and display updates only happen every 9 minutes.
 
 Further reading
 ---------------
 
 https://github.com/todbot/circuitpython-tricks
+
+
+Similar Projects
+----------------
+
+ - https://grafana.com/blog/2020/06/17/how-to-monitor-a-sourdough-starter-with-grafana/
+ - https://www.theverge.com/2021/3/19/22340817/breadwinner-smart-sourdough-starter-tracking-wifi-gadget-bread-yeast
+ - https://www.justinmklam.com/posts/2021/02/levain-monitor/
+ - https://www.twilio.com/blog/how-to-data-tracker-sourdough-starter?utm_campaign=sourdio-site&utm_medium=site&utm_source=sourdio
+ - https://github.com/Fsned/sourSmart
+ - https://hi-hi-hi.com/food/projects/2021/06/18/jar.html
