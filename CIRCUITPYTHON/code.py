@@ -1,3 +1,4 @@
+'''Copyright (c) 2022-2023, Cyril Stoller'''
 import time
 
 t_start = time.monotonic()  # To accurately measure the startup time

@@ -1,7 +1,14 @@
-SourdoughMonitor
-================
+Sourdough Monitor
+=================
 
-Sourdough monitoring system with an ESP32 feather board, a ToF distance sensor and onboard temperature/humidity sensors.
+[![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
+
+**Sourdough monitoring system with an ESP32, a time-of-flight distance sensor and temperature/humidity sensors.**
+
+_This work is licensed under a
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa]._
+
+
 
 ![collage](doc/collage.jpg)
 
@@ -101,6 +108,11 @@ Some of the growth curves look like this:
 ![](doc/growth.png)
 
 
+### Programming
+
+Upon connecting an ESP32 with native USB to the computer, it's flash memory will be mounted as a thumb drive. Now the content of the folder [`CIRCUITPYTHON`](CIRCUITPYTHON) has to be copied to this thumb drive.
+
+
 ### Calibration of the TMF8821
 
 For a new hardware setup, the cross talk of the TMF8821 should be calibrated to guarantee the best possible accuracy. This can be done using the script in [`experiments/distance/code4.py`](experiments/distance/code4.py) (uncomment line 44). The calibration data must then be written in byte format to a file named *"<config_spad_map>_<active_range>"* (e.g. *"3x3_normal_mode_short"*) in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibraion).
@@ -134,3 +146,9 @@ Similar Projects
  - https://www.twilio.com/blog/how-to-data-tracker-sourdough-starter?utm_campaign=sourdio-site&utm_medium=site&utm_source=sourdio
  - https://github.com/Fsned/sourSmart
  - https://hi-hi-hi.com/food/projects/2021/06/18/jar.html
+
+[![CC BY-NC-SA 4.0][cc-by-nc-sa-image]][cc-by-nc-sa]
+
+[cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
+[cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
+[cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
