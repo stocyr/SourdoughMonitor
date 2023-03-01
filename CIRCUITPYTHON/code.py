@@ -15,6 +15,7 @@ DEBUG = True
 DEBUG_DELAY = 0.0
 FRIDGE_SLEEP_TIME_FACTOR = 3
 FRIDGE_MAX_TEMP = 10
+INVERTED = True
 # =======================================================
 
 from math import sqrt, floor, ceil
@@ -491,8 +492,8 @@ try:
         epd_dc = board.D10
         display_bus = displayio.FourWire(spi, command=epd_dc, chip_select=epd_cs, baudrate=1000000)
         time.sleep(0.1)
-        display = adafruit_il0373.IL0373(display_bus, width=296, height=128, rotation=270, black_bits_inverted=False,
-                                         color_bits_inverted=False, grayscale=True, refresh_time=1, border=None)
+        display = adafruit_il0373.IL0373(display_bus, width=296, height=128, rotation=270, black_bits_inverted=INVERTED,
+                                         color_bits_inverted=INVERTED, grayscale=True, refresh_time=1, border=None)
 
         if DEBUG:
             print("display initialized.")
