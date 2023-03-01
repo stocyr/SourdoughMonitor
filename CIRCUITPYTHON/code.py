@@ -381,7 +381,7 @@ try:
             pausing = True
             if DEBUG:
                 print(f'Lid sits on a surface')
-            message_lines['height_calibration'] = ('Distance sensor blocked, pausing', False)
+            # message_lines['height_calibration'] = ('Distance sensor blocked, pausing', False)
         else:
             # Valid distance measurement
             if floor_distance is None:
