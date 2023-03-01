@@ -129,7 +129,7 @@ def read_external_environment(i2c_device: busio.I2C, retry_temp=3, temp_invalid=
             temperature = am2320.temperature
             time.sleep(0.2)
             humidity = am2320.relative_humidity
-        except ValueError:
+        except (ValueError, OSError):
             # This is an external sensor -- maybe it wasn't attached?
             if DEBUG:
                 print(f'External sensor not readable!')
