@@ -45,7 +45,14 @@ print(f'Calib state: {calib_state:0x}')  # 0: success, 31: no factory calibratio
 # Only load existing factory calibration
 calibration_data = tof.load_factory_calibration()
 
+# Now print the calibration data as hex on the terminal. During running of this file, the CIRCUITPYTHON drive is in
+# read-only mode, so copying from the console print-out and later manually storing to the drive is the solution.
 print(f'{" ".join(hex(d) for d in calibration_data)}')
+# The following code will convert the hex display print-out to a byte array and store it to a file '3x3_normal_mode_short'
+# given the `hex_string` looks like approximately this: hex_string = "0x0 0x1 0x1 0x0 0x1 0xff 0x51 0xf..."
+#     byte_array = bytes(int(b, base=16) for b in hex_string.split(' '))
+#     with open(Path('3x3_normal_mode_short'), 'wb') as f:
+#         f.write(byte_array)
 
 crosstalk_values = [int.from_bytes(calibration_data[0x3C + i * 4: 0x3C + (i + 1) * 4], 'little') for i in range(9)]
 print(f'Cross-talk values: {crosstalk_values}')
