@@ -487,7 +487,87 @@ try:
     if DEBUG:
         print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
-    # Initialize e-Ink display
+
+    # Load fonts and glyphs --> speeds up label rendering
+    # https://learn.adafruit.com/custom-fonts-for-pyportal-circuitpython-display/bitmap_font-library
+    tick_font = bitmap_font.load_font('fonts/00Starmap-11-11.pcf')
+    tahoma_font = bitmap_font.load_font('fonts/Tahoma_12.pcf')
+    tahoma_bold_font = bitmap_font.load_font('fonts/Tahoma-Bold_12.pcf')
+    tahoma_font.load_glyphs(b'1234567890-. ')
+    tick_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    tahoma_bold_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+    # Main display group
+    g = displayio.Group()
+
+    # Load background bitmap
+    f_bg = open('background_zoom.bmp' if plot_zoomed == Zoom.on else 'background.bmp', 'rb')
+    pic = displayio.OnDiskBitmap(f_bg)
+    t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
+    g.append(t)
+
+    if DEBUG:
+        print('Display background drawn.')
+        time.sleep(DEBUG_DELAY)
+
+    draw_texts(g, tahoma_font, tahoma_bold_font, ext_temp, ext_humidity, board_temp, board_humidity,
+                growth_percentage, peak_percentage, peak_hours)
+
+    if DEBUG:
+        print("Labels drawn.")
+        time.sleep(DEBUG_DELAY)
+
+    battery_symbol = BatteryWidget(x=250, y=4, width=10, height=19, upper_part_height=2, upper_part_width=4,
+                                    background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
+                                    exclamation_mark_threshold=0.038)
+    battery_symbol.draw(battery_percentage / 100)
+    if battery_symbol.critical_battery and message_lines['am2320'][0] == '':
+        message_lines['am2320'] = (' Low battery ', True)
+    g.append(battery_symbol)
+    g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=263, y=13))
+
+    if DEBUG:
+        print("Battery symbol drawn.")
+        time.sleep(DEBUG_DELAY)
+
+    # Add the graph plot
+    plot = GraphPlot(
+        width=296, height=128, origin=(33, 116), top_right=(288, 35), font=tick_font, line_color=PaletteColor.black,
+        yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=1,
+        background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
+        alignment='right')
+
+    plot_mem: CyclicBuffer = temp_mem if plot_type == PlotType.temp else growth_mem
+    if plot_zoomed == Zoom.on:
+        plot_amount = min(plot_mem.current_size, ceil(GRAPH_WIDTH / 2.0))
+    else:
+        plot_amount = plot_mem.current_size
+
+    value_array = plot_mem.read_array(amount=plot_amount)
+
+    if value_array:
+        # print(f'Value array: {",".join(map(str, value_array))}')
+        plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
+    if peak_pos_in_history is not None and plot_type == PlotType.growth:
+        plot.plot_peak(value_array, peak_pos_in_history, zoomed=plot_zoomed == Zoom.on)
+    g.append(plot)
+
+    # Write message lines
+    for key, y_pos in zip(['am2320', 'tmf8821', 'height_calibration'], [50, 70, 90]):
+        message, emphasize = message_lines[key]
+        if message != '':
+            color_fg, color_bg = (WHITE, BLACK) if emphasize else (BLACK, WHITE)
+            font = tahoma_bold_font if emphasize else tahoma_font
+            g.append(bitmap_label.Label(font, color=color_fg, text=message, x=55, y=y_pos,
+                                        background_color=color_bg))
+
+    if DEBUG:
+        print("Plot drawing prepared.")
+        time.sleep(DEBUG_DELAY)
+    
+    # Initialize e-Ink display and immediately write to it, see https://www.good-display.com/news/79.html
+    # See --> FAQ #9 "There should be no delay between e-paper initialization and iamge-display.
+    # A long delay will put the e-ink in voltage boosting for too long, which is easy to damage the e-ink."
     with busio.SPI(board.SCK, board.MOSI) as spi:
         epd_cs = board.D9
         epd_dc = board.D10
@@ -498,83 +578,6 @@ try:
 
         if DEBUG:
             print("display initialized.")
-            time.sleep(DEBUG_DELAY)
-
-        # Load fonts and glyphs --> speeds up label rendering
-        # https://learn.adafruit.com/custom-fonts-for-pyportal-circuitpython-display/bitmap_font-library
-        tick_font = bitmap_font.load_font('fonts/00Starmap-11-11.pcf')
-        tahoma_font = bitmap_font.load_font('fonts/Tahoma_12.pcf')
-        tahoma_bold_font = bitmap_font.load_font('fonts/Tahoma-Bold_12.pcf')
-        tahoma_font.load_glyphs(b'1234567890-. ')
-        tick_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
-        tahoma_bold_font.load_glyphs(b' %+,-.1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
-
-        # Main display group
-        g = displayio.Group()
-
-        # Load background bitmap
-        f_bg = open('background_zoom.bmp' if plot_zoomed == Zoom.on else 'background.bmp', 'rb')
-        pic = displayio.OnDiskBitmap(f_bg)
-        t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
-        g.append(t)
-
-        if DEBUG:
-            print('Display background drawn.')
-            time.sleep(DEBUG_DELAY)
-
-        draw_texts(g, tahoma_font, tahoma_bold_font, ext_temp, ext_humidity, board_temp, board_humidity,
-                   growth_percentage, peak_percentage, peak_hours)
-
-        if DEBUG:
-            print("Labels drawn.")
-            time.sleep(DEBUG_DELAY)
-
-        battery_symbol = BatteryWidget(x=250, y=4, width=10, height=19, upper_part_height=2, upper_part_width=4,
-                                       background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
-                                       exclamation_mark_threshold=0.038)
-        battery_symbol.draw(battery_percentage / 100)
-        if battery_symbol.critical_battery and message_lines['am2320'][0] == '':
-            message_lines['am2320'] = (' Low battery ', True)
-        g.append(battery_symbol)
-        g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=263, y=13))
-
-        if DEBUG:
-            print("Battery symbol drawn.")
-            time.sleep(DEBUG_DELAY)
-
-        # Add the graph plot
-        plot = GraphPlot(
-            width=296, height=128, origin=(33, 116), top_right=(288, 35), font=tick_font, line_color=PaletteColor.black,
-            yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=1,
-            background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
-            alignment='right')
-
-        plot_mem: CyclicBuffer = temp_mem if plot_type == PlotType.temp else growth_mem
-        if plot_zoomed == Zoom.on:
-            plot_amount = min(plot_mem.current_size, ceil(GRAPH_WIDTH / 2.0))
-        else:
-            plot_amount = plot_mem.current_size
-
-        value_array = plot_mem.read_array(amount=plot_amount)
-
-        if value_array:
-            # print(f'Value array: {",".join(map(str, value_array))}')
-            plot.plot_graph(value_array, zoomed=plot_zoomed == Zoom.on)
-        if peak_pos_in_history is not None and plot_type == PlotType.growth:
-            plot.plot_peak(value_array, peak_pos_in_history, zoomed=plot_zoomed == Zoom.on)
-        g.append(plot)
-
-        # Write message lines
-        for key, y_pos in zip(['am2320', 'tmf8821', 'height_calibration'], [50, 70, 90]):
-            message, emphasize = message_lines[key]
-            if message != '':
-                color_fg, color_bg = (WHITE, BLACK) if emphasize else (BLACK, WHITE)
-                font = tahoma_bold_font if emphasize else tahoma_font
-                g.append(bitmap_label.Label(font, color=color_fg, text=message, x=55, y=y_pos,
-                                            background_color=color_bg))
-
-        if DEBUG:
-            print("Plot drawn.")
             time.sleep(DEBUG_DELAY)
 
         display.show(g)
