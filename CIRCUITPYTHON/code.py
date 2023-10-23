@@ -16,6 +16,7 @@ DEBUG_DELAY = 0.0
 FRIDGE_SLEEP_TIME_FACTOR = 3
 FRIDGE_MAX_TEMP = 10
 INVERTED = True
+INTERVAL_MINUTES = 3
 # =======================================================
 
 from math import sqrt, floor, ceil
@@ -482,7 +483,7 @@ try:
     if peak_ind is not None:
         peak_pos_in_history = len(growth_array) - peak_ind - 1
         peak_percentage = growth_array[peak_ind]
-        peak_hours = peak_pos_in_history * 3 / 60
+        peak_hours = peak_pos_in_history * INTERVAL_MINUTES / 60
     if DEBUG:
         print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
@@ -592,7 +593,7 @@ try:
         print("Setting up deep sleep.")
         time.sleep(DEBUG_DELAY)
 
-    sleep_time = 3 * 60
+    sleep_time = INTERVAL_MINUTES * 60
     # If in refrigerator, update everything slower
     if ext_temp is not None and ext_temp < FRIDGE_MAX_TEMP:
         sleep_time *= FRIDGE_SLEEP_TIME_FACTOR
