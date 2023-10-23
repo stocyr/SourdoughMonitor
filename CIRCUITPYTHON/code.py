@@ -16,7 +16,7 @@ DEBUG_DELAY = 0.0
 FRIDGE_SLEEP_TIME_FACTOR = 3
 FRIDGE_MAX_TEMP = 10
 INVERTED = True
-INTERVAL_MINUTES = 3
+INTERVAL_MINUTES = 4
 # =======================================================
 
 from math import sqrt, floor, ceil
@@ -544,7 +544,7 @@ try:
 
         # Add the graph plot
         plot = GraphPlot(
-            width=296, height=128, origin=(28, 116), top_right=(288, 35), font=tick_font, line_color=PaletteColor.black,
+            width=296, height=128, origin=(33, 116), top_right=(288, 35), font=tick_font, line_color=PaletteColor.black,
             yticks_color=PaletteColor.dark_gray, font_color=PaletteColor.dark_gray, line_width=1,
             background_color=PaletteColor.transparent, ygrid_color=PaletteColor.light_gray, font_size=(5, 7),
             alignment='right')
@@ -597,7 +597,7 @@ try:
     # If in refrigerator, update everything slower
     if ext_temp is not None and ext_temp < FRIDGE_MAX_TEMP:
         sleep_time *= FRIDGE_SLEEP_TIME_FACTOR
-        # To compensate for the x-axis tick distance of 3 min, duplicate the value in the memory
+        # To compensate for the x-axis tick distance of 4 min, duplicate the value in the memory
         for _ in range(FRIDGE_SLEEP_TIME_FACTOR - 1):
             if growth_percentage is not None:
                 growth_mem.add_value(growth_percentage)
@@ -607,7 +607,7 @@ try:
     # If a button was pressed, we assume that the interruption in average occurs after 1/2 of the sleep time
     if wake_reason in ['left', 'middle']:
         # --> wait for 1.5x time to compensate for the early interrupt
-        # (we aim at a constant sampling frequency of 3 min)
+        # (we aim at a constant sampling frequency of 4 min)
         sleep_time *= 1.5
 
     timeout_alarm = alarm.time.TimeAlarm(monotonic_time=t_start - BOOT_TIME + sleep_time)

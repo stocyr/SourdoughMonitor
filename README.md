@@ -96,7 +96,7 @@ Usage
 
 ![getting_started_guide](doc/getting_started.png)
 
-The sensors and display updates happen every 3 minutes and the monitor goes to deep sleep mode between the updates. Whenever a button is pressed, the next sleep time is 1.5x the usual interval to account for interruption of an average of 0.5x the sleep time.
+The sensors and display updates happen every 4 minutes and the monitor goes to deep sleep mode between the updates. Whenever a button is pressed, the next sleep time is 1.5x the usual interval to account for interruption of an average of 0.5x the sleep time.
 
 The battery lasts about 2-3 weeks. If the monitor is in the refrigerator (the external temperature sensor reads less than 10°C), the monitor is in power-safe mode and the sensors and display updates only happen every 9 minutes.
 
