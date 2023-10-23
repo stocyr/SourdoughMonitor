@@ -11,11 +11,11 @@ i2c_power.switch_to_input()
 # ===================== CONSTANTS =======================
 BOOT_TIME = 1.3  # second
 GRAPH_WIDTH = 261  # pixel
-DEBUG = True
+DEBUG = False
 DEBUG_DELAY = 0.0
 FRIDGE_SLEEP_TIME_FACTOR = 3
 FRIDGE_MAX_TEMP = 10
-INVERTED = True
+INVERTED = False
 INTERVAL_MINUTES = 4
 # =======================================================
 
