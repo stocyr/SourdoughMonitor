@@ -340,3 +340,4 @@ cython_debug/
 
 /*.csv
 CIRCUITPYTHON/calibration/*
+CIRCUITPYTHON/metric_telemetry/secrets.py

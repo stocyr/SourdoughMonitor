@@ -17,6 +17,9 @@ FRIDGE_SLEEP_TIME_FACTOR = 3
 FRIDGE_MAX_TEMP = 10
 INVERTED = False
 INTERVAL_MINUTES = 4
+TELEMETRY = True
+INFLUXDB_MEASUREMENT = "rise"
+DEVICE_NAME = "ESP32-S2"
 # =======================================================
 
 from math import sqrt, floor, ceil
@@ -29,8 +32,10 @@ from adafruit_display_text import bitmap_label
 from adafruit_lc709203f import LC709203F
 import adafruit_il0373
 import adafruit_am2320
-from lib.tmf8821.adafruit_tmf8821 import TMF8821
 from adafruit_bitmap_font import bitmap_font
+
+from lib.tmf8821.adafruit_tmf8821 import TMF8821
+from metric_telemetry.secrets import WIFI_AUTH, INFLUXDB_URL, INFLUXDB_API_TOKEN
 
 # Read buttons
 if DEBUG:
@@ -264,7 +269,33 @@ def log_exception_to_sd_card(exc):
     return exc_string
 
 
+def connect_to_wifi():
+    global wifi_connectivity, wifi_chan_mem
+    wifi_idx_trial = None  # if None: try the previous one from persistent memory
+    # Construct indices of Wi-Fi configurations such that the previously working one is at the front
+    wifi_trial_indices = [wifi_idx_mem.value] + [i for i in range(len(WIFI_AUTH)) if i != wifi_idx_mem.value]
+    for ind, (ssid, passwd) in [(i, WIFI_AUTH[i]) for i in wifi_trial_indices]:
+        try:
+            wifi.radio.connect(ssid=ssid, password=passwd, channel=wifi_chan_mem.value)
+            if wifi.radio.ap_info is not None:
+                # Wi-Fi successfully connected!
+                wifi_connectivity = wifi.radio.ap_info.rssi
+                # Potentially update working Wi-Fi configuration to persistent memory
+                wifi_chan_mem.value = wifi.radio.ap_info.channel
+                wifi_idx_mem.value = ind
+                break
+        except ConnectionError as e:
+            # Cannot connect
+            if DEBUG:
+                print(f'Cannot connect to the Wi-Fi {ssid} with pw "{passwd}": {e}')
+    else:
+        # Didn't find any working Wi-Fi key pair
+        if DEBUG:
+            print(f'Non of the {len(WIFI_AUTH)} Wi-Fi configuration is working!')
+
+
 # ===================== MAIN CODE =======================
+
 
 try:
     displayio.release_displays()
@@ -297,6 +328,8 @@ try:
     start_height_mem = SingleIntMemory(addr=floor_distance_mem.get_last_address(), default_value=0)
     temp_mem = Cyclic16BitTempBuffer(addr=start_height_mem.get_last_address(), max_value_capacity=GRAPH_WIDTH)
     growth_mem = Cyclic16BitPercentageBuffer(addr=temp_mem.get_last_address(), max_value_capacity=GRAPH_WIDTH)
+    wifi_idx_mem = SingleIntMemory(addr=growth_mem.get_last_address(), default_value=0, invalid_value=-1, size=1)
+    wifi_chan_mem = SingleIntMemory(addr=wifi_idx_mem.get_last_address(), default_value=0, invalid_value=-1, size=1)
 
     plot_type = plot_type_mem.value
     plot_zoomed = zoom_mem.value
@@ -487,6 +520,58 @@ try:
     if DEBUG:
         print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
+    # Try to connect to the internet and send telemetry metrics
+    wifi_connectivity = "None"
+    telemetry_success = False
+    if TELEMETRY:
+        wifi.radio.enabled = True
+        connect_to_wifi()
+
+        if wifi_connectivity is not None:
+            # Prepare requests library
+            pool = socketpool.SocketPool(wifi.radio)
+            with open('all_certs.pem', 'r') as f:
+                CA_STRING = f.read()  # Use custom CA chain for InfluxDB TLS access
+            context = ssl.create_default_context()
+            context.load_verify_locations(cadata=CA_STRING)
+            request = adafruit_requests.Session(pool, context)
+            HEADERS = {
+                "Authorization": f"Token {INFLUXDB_API_TOKEN}",
+                "precision": "s"
+            }
+            influxdb_row = f"{INFLUXDB_MEASUREMENT},device={DEVICE_NAME} " + \
+                           f"height={growth_percentage:.2f}," if growth_percentage is not None else "" + \
+                           f"height_std={distance_stddev:.2f}," if distance_stddev is not None else "" + \
+                           f"floor_calib={floor_distance:.2f}," if floor_distance is not None else "" + \
+                           f"start_calib={start_height:.2f}," if start_height is not None else "" \
+                           f"temp_in={ext_temp:.2f}," if ext_temp is not None else "" + \
+                           f"temp_out={board_temp:.2f}," + \
+                           f"hum_in={ext_humidity:.2f}," if ext_humidity is not None else "" + \
+                           f"hum_out={board_humidity:.2f}," if board_humidity is not None else "" + \
+                           f"wifi_rssi={wifi_connectivity:d}," + \
+                           f"wake_reason=\"{wake_reason}\"," + \
+                           f"battery_level={battery_percentage:.2f}"
+
+            if DEBUG:
+                print(f"InfluxDB Row: {influxdb_row}")
+                time.sleep(DEBUG_DELAY)
+
+            try:
+                response = request.post(INFLUXDB_URL, headers=HEADERS, data=influxdb_row)
+                if response.status_code == 204:
+                    telemetry_success = True
+                    if DEBUG:
+                        print("Data sent to InfluxDB successfully!")
+                else:
+                    raise Exception(f"InfluxDB didn't return status 204: {response.text}")
+                response.close()
+            except Exception as e:
+                exc_string = log_exception_to_sd_card(e)
+                if DEBUG:
+                    print(f"InfluxDB problem: {exc_string}")
+
+        # Disable Wi-Fi after using it
+        wifi.radio.enabled = False
 
     # Load fonts and glyphs --> speeds up label rendering
     # https://learn.adafruit.com/custom-fonts-for-pyportal-circuitpython-display/bitmap_font-library
