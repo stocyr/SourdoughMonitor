@@ -33,6 +33,11 @@ from adafruit_lc709203f import LC709203F
 import adafruit_il0373
 import adafruit_am2320
 from adafruit_bitmap_font import bitmap_font
+import ipaddress
+import wifi
+import socketpool
+import ssl
+import adafruit_requests
 
 from lib.tmf8821.adafruit_tmf8821 import TMF8821
 from metric_telemetry.secrets import WIFI_AUTH, INFLUXDB_URL, INFLUXDB_API_TOKEN
