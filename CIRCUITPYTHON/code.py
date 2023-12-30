@@ -139,7 +139,7 @@ def read_external_environment(i2c_device: busio.I2C, retry_temp=3, temp_invalid=
     return temperature, humidity
 
 
-def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> float:
+def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, float]:
     try:
         tof = TMF8821(i2c_device)
         tof.config.iterations = 3.5e6
@@ -156,12 +156,12 @@ def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> float:
             all_distances.extend(measurement.distances)
         tof.stop_measurements()
         mean_distance = sum(all_distances) / len(all_distances)
+        stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]))
         if DEBUG:
-            stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]))
             print(f'Distance: {mean_distance:.2f} with std = {stddev}')
-        return mean_distance
+        return mean_distance, stddev
     except Exception:
-        return None
+        return None, None
 
 
 def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp, board_humidity, growth_percentage,
@@ -365,7 +365,7 @@ try:
         time.sleep(DEBUG_DELAY)
 
     # Read time-of-flight distance from TMF8821 sensor
-    current_distance = read_distance(i2c)
+    current_distance, distance_stddev = read_distance(i2c)
 
     # Handle distance and calibrations
     growth_percentage = None
