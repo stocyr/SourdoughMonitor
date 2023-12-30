@@ -547,14 +547,14 @@ try:
                 "precision": "s"
             }
             influxdb_row = f"{INFLUXDB_MEASUREMENT},device={DEVICE_NAME} " + \
-                           f"height={growth_percentage:.2f}," if growth_percentage is not None else "" + \
-                           f"height_std={distance_stddev:.2f}," if distance_stddev is not None else "" + \
-                           f"floor_calib={floor_distance:.2f}," if floor_distance is not None else "" + \
-                           f"start_calib={start_height:.2f}," if start_height is not None else "" \
-                           f"temp_in={ext_temp:.2f}," if ext_temp is not None else "" + \
+                           (f"height={growth_percentage:.2f}," if growth_percentage is not None else "") + \
+                           (f"height_std={distance_stddev:.2f}," if distance_stddev is not None else "") + \
+                           (f"floor_calib={floor_distance:.2f}," if floor_distance is not None else "") + \
+                           (f"start_calib={start_height:.2f}," if start_height is not None else "") + \
+                           (f"temp_in={ext_temp:.2f}," if ext_temp is not None else "") + \
                            f"temp_out={board_temp:.2f}," + \
-                           f"hum_in={ext_humidity:.2f}," if ext_humidity is not None else "" + \
-                           f"hum_out={board_humidity:.2f}," if board_humidity is not None else "" + \
+                           (f"hum_in={ext_humidity:.2f}," if ext_humidity is not None else "") + \
+                           f"hum_out={board_humidity:.2f}," + \
                            f"wifi_rssi={wifi_connectivity:d}," + \
                            f"wake_reason=\"{wake_reason}\"," + \
                            f"battery_level={battery_percentage:.2f}"
