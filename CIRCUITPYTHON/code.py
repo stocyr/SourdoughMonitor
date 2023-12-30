@@ -602,17 +602,32 @@ try:
         print("Labels drawn.")
         time.sleep(DEBUG_DELAY)
 
-    battery_symbol = BatteryWidget(x=250, y=4, width=10, height=19, upper_part_height=2, upper_part_width=4,
-                                    background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
-                                    exclamation_mark_threshold=0.038)
+    battery_symbol = BatteryWidget(x=257, y=4, width=10, height=19, upper_part_height=2, upper_part_width=4,
+                                   background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
+                                   exclamation_mark_threshold=0.038)
     battery_symbol.draw(battery_percentage / 100)
     if battery_symbol.critical_battery and message_lines['am2320'][0] == '':
         message_lines['am2320'] = (' Low battery ', True)
     g.append(battery_symbol)
-    g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=263, y=13))
+    g.append(bitmap_label.Label(tahoma_font, color=DARK, text=f'{battery_percentage:.0f}%', x=270, y=13))
 
     if DEBUG:
         print("Battery symbol drawn.")
+        time.sleep(DEBUG_DELAY)
+
+    # Load Wi-Fi bitmap
+    if wifi_connectivity is None:
+        f_wifi = open('imgs/wifi_none.bmp', 'rb')
+    elif telemetry_success:
+        f_wifi = open('imgs/wifi_okay.bmp', 'rb')
+    else:
+        f_wifi = open('imgs/wifi_error.bmp', 'rb')
+    wifi_pic = displayio.OnDiskBitmap(f_wifi)
+    t = displayio.TileGrid(pic, pixel_shader=pic.wifi_pic, x=232, y=6)
+    g.append(t)
+
+    if DEBUG:
+        print("Wi-Fi symbol drawn.")
         time.sleep(DEBUG_DELAY)
 
     # Add the graph plot
@@ -675,6 +690,7 @@ try:
         # Prepare for low power deep sleep
         displayio.release_displays()
 
+    f_wifi.close()
     f_bg.close()
 
     if DEBUG:
