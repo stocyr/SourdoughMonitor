@@ -142,6 +142,12 @@ The ESP32 tries to access the Wi-Fi and push relevant metrics to an InfluxDB buc
 
 A list of Wi-Fi configurations can be stored in [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py) as a tuple of `(SSID, Password)`. The Wi-Fi configurations are tried in the given order and the first working one is tried first the next time the ESP32 wakes up (the according access point channel is also cached to persistent memory and tried first next time).
 
+Note that the CircuitPython 7.3.3 `requests` module throws a Runtime error during the SSL handshake for some pages (see the [issue here](https://github.com/adafruit/circuitpython/issues/7429)), so the complete CA chain of the POST request target URL must be downloaded:
+1. Find out the cluster URL of the targets InfluxDB cloud instance (see below)
+2. Download all certificates in the CA chain using [this bash command](https://unix.stackexchange.com/questions/368123/how-to-extract-the-root-ca-and-subordinate-ca-from-a-certificate-chain-in-linux/487546#487546) using the above URL
+3. Open all the certificates and concatenate them in one file
+4. Place the file in [`CIRCUITPYTHON/metric_telemetry/all_certs.pem`](CIRCUITPYTHON/metric_telemetry/all_certs.pem).
+
 #### InfluxDB settings
 
 In the same file as the Wi-Fi configurations, [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py), the information about the InfluxDB are stored. To this end, create a new bucket on InfluxDB Cloud and fill in following values in the secrets file:
