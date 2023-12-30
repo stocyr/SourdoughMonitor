@@ -537,7 +537,7 @@ try:
         if wifi_connectivity is not None:
             # Prepare requests library
             pool = socketpool.SocketPool(wifi.radio)
-            with open('all_certs.pem', 'r') as f:
+            with open('metric_telemetry/all_certs.pem', 'r') as f:
                 CA_STRING = f.read()  # Use custom CA chain for InfluxDB TLS access
             context = ssl.create_default_context()
             context.load_verify_locations(cadata=CA_STRING)
