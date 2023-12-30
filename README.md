@@ -125,7 +125,17 @@ If there is always a container with the same height being used, it makes sense t
 ### Telemetry
 
 The ESP32 tries to access the Wi-Fi and push relevant metrics to an InfluxDB bucket every time it wakes up. The following metrics are sent:
-
+- **`height`**: Growth percentage (relative to calibrated start position)
+- **`height_std`**: Standard deviation in mm of last measured distance (not relative to percentage yet)
+- **`floor_calib`**: calibrated floor distance in mm
+- **`start_calib`**: calibrated start distance in mm
+- **`temp_in`**: Temperature in rise chamber in °C
+- **`temp_out`**: Temperature in environment air in °C
+- **`hum_in`**: Humidity in rise chamber
+- **`hum_out`**: Humidity in environment air
+- **`wifi_rssi`**: RSSI of Wi-Fi
+- **`wake_reason`**: Reason for wakeup after deep-sleep: "unknown", "reset", "left" (button) or "middle" (button)
+- **`battery_level`**: Battery charge percentage
 
 
 #### Wi-Fi configurations
