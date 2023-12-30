@@ -630,8 +630,8 @@ try:
     else:
         f_wifi = open('imgs/wifi_error.bmp', 'rb')
     wifi_pic = displayio.OnDiskBitmap(f_wifi)
-    t = displayio.TileGrid(pic, pixel_shader=pic.wifi_pic, x=232, y=6)
-    g.append(t)
+    t2 = displayio.TileGrid(wifi_pic, pixel_shader=wifi_pic.pixel_shader, x=232, y=6)
+    g.append(t2)
 
     if DEBUG:
         print("Wi-Fi symbol drawn.")
