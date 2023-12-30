@@ -528,7 +528,7 @@ try:
         print(f'peak percentage: {peak_percentage}, peak hours: {peak_hours}, peak ind {peak_ind}')
 
     # Try to connect to the internet and send telemetry metrics
-    wifi_connectivity = "None"
+    wifi_connectivity = None
     telemetry_success = False
     if TELEMETRY:
         wifi.radio.enabled = True
