@@ -115,7 +115,7 @@ Upon connecting an ESP32 with native USB to the computer, it's flash memory will
 
 ### Calibration of the TMF8821
 
-For a new hardware setup, the cross talk of the TMF8821 should be calibrated to guarantee the best possible accuracy. This can be done using the script in [`experiments/distance/code4.py`](experiments/distance/code4.py) (uncomment line 44). The calibration data must then be written in byte format to a file named *"<config_spad_map>_<active_range>"* (e.g. *"3x3_normal_mode_short"*) in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibraion).
+For a new hardware setup, the cross talk of the TMF8821 should be calibrated to guarantee the best possible accuracy. This can be done using the script in [`experiments/distance/code4.py`](experiments/distance/code4.py) (uncomment line 44). The calibration data must then be written in byte format to a file named *"<config_spad_map>_<active_range>"* (e.g. *"3x3_normal_mode_short"*) in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibration).
 
 
 ### Container floor preconfiguration
@@ -144,7 +144,16 @@ A list of Wi-Fi configurations can be stored in [`CIRCUITPYTHON/metric_telemetry
 
 #### InfluxDB settings
 
-In the same file as the Wi-Fi configurations, [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py), the information about the InfluxDB are stored. To this end, create a new bucket on InfluxDB and fill in the URL prefix for the REST API, the organization and bucket names, the measurement description and the according authorization token. A template file can be found at [`CIRCUITPYTHON/metric_telemetry/secrets_template.py`](CIRCUITPYTHON/metric_telemetry/secrets_template.py).
+In the same file as the Wi-Fi configurations, [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py), the information about the InfluxDB are stored. To this end, create a new bucket on InfluxDB Cloud and fill in following values in the secrets file:
+
+- `INFLUXDB_URL_WRITE`: Using as prefix the _Cluster URL (Host Name)_ from the _Organization Settings_
+- `INFLUXDB_ORG`: The Organization's name
+- `INFLUXDB_BUCKET`: The Bucket's name
+- `INFLUXDB_API_TOKEN`: A token with write access to the bucket
+
+A template file can be found at [`CIRCUITPYTHON/metric_telemetry/secrets_template.py`](CIRCUITPYTHON/metric_telemetry/secrets_template.py).
+
+Then also adjust the measurement's name (`INFLUXDB_MEASUREMENT`) and the device's name (`DEVICE_NAME`) in [`CIRCUITPYTHON/code.py`](CIRCUITPYTHON/code.py).
 
 ### Trouble Shooting
 
