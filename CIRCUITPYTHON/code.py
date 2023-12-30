@@ -1,4 +1,4 @@
-'''Copyright (c) 2022-2023, Cyril Stoller'''
+'''Copyright (c) 2022-2024, Cyril Stoller'''
 import time
 
 t_start = time.monotonic()  # To accurately measure the startup time
@@ -501,7 +501,7 @@ try:
     g = displayio.Group()
 
     # Load background bitmap
-    f_bg = open('background_zoom.bmp' if plot_zoomed == Zoom.on else 'background.bmp', 'rb')
+    f_bg = open('imgs/background_zoom.bmp' if plot_zoomed == Zoom.on else 'imgs/background.bmp', 'rb')
     pic = displayio.OnDiskBitmap(f_bg)
     t = displayio.TileGrid(pic, pixel_shader=pic.pixel_shader)
     g.append(t)
@@ -511,7 +511,7 @@ try:
         time.sleep(DEBUG_DELAY)
 
     draw_texts(g, tahoma_font, tahoma_bold_font, ext_temp, ext_humidity, board_temp, board_humidity,
-                growth_percentage, peak_percentage, peak_hours)
+               growth_percentage, peak_percentage, peak_hours)
 
     if DEBUG:
         print("Labels drawn.")
@@ -564,7 +564,7 @@ try:
     if DEBUG:
         print("Plot drawing prepared.")
         time.sleep(DEBUG_DELAY)
-    
+
     # Initialize e-Ink display and immediately write to it, see https://www.good-display.com/news/79.html
     # See --> FAQ #9 "There should be no delay between e-paper initialization and iamge-display.
     # A long delay will put the e-ink in voltage boosting for too long, which is easy to damage the e-ink."
@@ -624,4 +624,3 @@ except Exception as e:
     if DEBUG:
         print(exc_string)
     raise e
-    
