@@ -52,13 +52,13 @@ the schematic can be downloaded [here](https://learn.adafruit.com/assets/109937)
 
 ### Programming Language
 
-We work with Python 3.9, specifically CircuitPython 7.3.2.
+We work with Python 3.9, specifically CircuitPython 7.3.3.
 
 ### IDE
 
 We work with PyCharm CircuitPython, a guide to setting it up to work with circuitpythyon can be found  [here]
 (https://learn.adafruit.com/welcome-to-circuitpython/pycharm-and-circuitpython).
-Since CircuitPython 7.3.2 is forked from the latest MicroPython repository which
+Since CircuitPython 7.3.3 is forked from the latest MicroPython repository which
 uses [Python <= 3.9 features] (https://docs.micropython.org/en/latest/genrst/index.html), we create a virtual  
 environment with Python 3.9 and install the `circuitpython-stubs` as well as the
 [_Serial Port Monitor_](https://plugins.jetbrains.com/plugin/8031-serial-port-monitor) plugin.
@@ -122,6 +122,19 @@ For a new hardware setup, the cross talk of the TMF8821 should be calibrated to 
 
 If there is always a container with the same height being used, it makes sense to only calibrate the floor once and write the distance in millimeters (just the number, no unit) to a file *"floor.txt"* in [`CIRCUITPYTHON/calibration`](CIRCUITPYTHON/calibration).
 
+### Telemetry
+
+The ESP32 tries to access the Wi-Fi and push relevant metrics to an InfluxDB bucket every time it wakes up. The following metrics are sent:
+
+
+
+#### Wi-Fi configurations
+
+A list of Wi-Fi configurations can be stored in [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py) as a tuple of `(SSID, Password)`. The Wi-Fi configurations are tried in the given order and the first working one is tried first the next time the ESP32 wakes up (the according access point channel is also cached to persistent memory and tried first next time).
+
+#### InfluxDB settings
+
+In the same file as the Wi-Fi configurations, [`CIRCUITPYTHON/metric_telemetry/secrets.py`](CIRCUITPYTHON/metric_telemetry/secrets.py), the information about the InfluxDB are stored. To this end, create a new bucket on InfluxDB and fill in the URL prefix for the REST API, the organization and bucket names, the measurement description and the according authorization token. A template file can be found at [`CIRCUITPYTHON/metric_telemetry/secrets_template.py`](CIRCUITPYTHON/metric_telemetry/secrets_template.py).
 
 ### Trouble Shooting
 
