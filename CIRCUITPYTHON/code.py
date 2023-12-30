@@ -166,7 +166,7 @@ def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, 
             all_distances.extend(measurement.distances)
         tof.stop_measurements()
         mean_distance = sum(all_distances) / len(all_distances)
-        stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]))
+        stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]) / len(all_distances))
         if DEBUG:
             print(f'Distance: {mean_distance:.2f} with std = {stddev}')
         return mean_distance, stddev
@@ -405,10 +405,11 @@ try:
         time.sleep(DEBUG_DELAY)
 
     # Read time-of-flight distance from TMF8821 sensor
-    current_distance, distance_stddev = read_distance(i2c)
+    current_distance, distance_std = read_distance(i2c)
 
     # Handle distance and calibrations
     growth_percentage = None
+    growth_perc_std = None
     dough_height = None
     pausing = False
     if current_distance is None:
@@ -441,6 +442,7 @@ try:
                 else:
                     # Start height calibrated
                     growth_percentage = dough_height / start_height * 100
+                    growth_perc_std = distance_std / start_height * 100
                     if DEBUG:
                         print(f'Floor: {floor_distance / 10:.1f}cm, Start height: {start_height / 10:.1f}cm, ', end='')
                         print(f'Current height: {dough_height / 10:.1f}cm, Growth: {growth_percentage:.2f}%')
@@ -473,6 +475,7 @@ try:
                 message_lines['tmf8821'] = (f'Floor calib {distance_rounded / 10:.1f}cm', False)
                 # Floor was reset, so until recalibration of normal height, don't update growth
                 growth_percentage = None
+                growth_perc_std = None
                 # Also reset history of growths
                 growth_mem.make_empty()
         else:
@@ -497,6 +500,7 @@ try:
                     if floor_distance is not None:
                         # Right after calibration is complete, the first reading must be 100%
                         growth_percentage = 100.0
+                        growth_perc_std = distance_std / start_height * 100
                         # Also clear growth mem
                         growth_mem.make_empty()
                 else:
@@ -548,7 +552,7 @@ try:
             }
             influxdb_row = f"{INFLUXDB_MEASUREMENT},device={DEVICE_NAME} " + \
                            (f"height={growth_percentage:.2f}," if growth_percentage is not None else "") + \
-                           (f"height_std={distance_stddev:.2f}," if distance_stddev is not None else "") + \
+                           (f"height_std={growth_perc_std:.2f}," if growth_perc_std is not None else "") + \
                            (f"floor_calib={floor_distance:.2f}," if floor_distance is not None else "") + \
                            (f"start_calib={start_height:.2f}," if start_height is not None else "") + \
                            (f"temp_in={ext_temp:.2f}," if ext_temp is not None else "") + \
