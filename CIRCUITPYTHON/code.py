@@ -276,9 +276,11 @@ def log_exception_to_sd_card(exc):
 
 def connect_to_wifi():
     global wifi_connectivity, wifi_chan_mem
-    wifi_idx_trial = None  # if None: try the previous one from persistent memory
     # Construct indices of Wi-Fi configurations such that the previously working one is at the front
-    wifi_trial_indices = [wifi_idx_mem.value] + [i for i in range(len(WIFI_AUTH)) if i != wifi_idx_mem.value]
+    if len(WIFI_AUTH) > wifi_idx_mem.value:
+        wifi_trial_indices = [wifi_idx_mem.value] + [i for i in range(len(WIFI_AUTH)) if i != wifi_idx_mem.value]
+    else:
+        wifi_trial_indices = list(range(len(WIFI_AUTH)))
     for ind, (ssid, passwd) in [(i, WIFI_AUTH[i]) for i in wifi_trial_indices]:
         try:
             wifi.radio.connect(ssid=ssid, password=passwd, channel=wifi_chan_mem.value)
@@ -296,7 +298,7 @@ def connect_to_wifi():
     else:
         # Didn't find any working Wi-Fi key pair
         if DEBUG:
-            print(f'Non of the {len(WIFI_AUTH)} Wi-Fi configuration is working!')
+            print(f'None of the {len(WIFI_AUTH)} Wi-Fi configuration(s) is working!')
 
 
 # ===================== MAIN CODE =======================
