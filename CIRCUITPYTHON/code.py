@@ -148,7 +148,7 @@ def read_external_environment(i2c_device: busio.I2C, retry_temp=3, temp_invalid=
     return temperature, humidity
 
 
-def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, float]:
+def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, float, float]:
     try:
         tof = TMF8821(i2c_device)
         tof.config.iterations = 3.5e6
@@ -158,20 +158,34 @@ def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, 
         tof.active_range = 'short'
         tof.write_configuration()
         tof.load_factory_calibration(calib_folder='calibration')
+
+        all_distances = [[] for _ in range(3 * 3)]  # 9x5 nested list
+        spad_means = [0] * (3 * 3)
+
         tof.start_measurements()
-        all_distances = []
         for measurement_repetition in range(oversampling):
             measurement = tof.wait_for_measurement(timeout_ms=500)
-            all_distances.extend(measurement.distances)
-        # TODO: point-wise variance and surface_roughness?
+            for i_spad, distance in enumerate(measurement.distances):
+                all_distances[i_spad].append(distance)
+                spad_means[i_spad] += distance
         tof.stop_measurements()
-        mean_distance = sum(all_distances) / len(all_distances)
-        stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]) / len(all_distances))
+
+        # Calculate per-spad cell mean
+        spad_means = [spad_sum / oversampling for spad_sum in spad_means]
+        global_distance = sum(spad_means) / len(spad_means)
+        global_roughness = max(spad_means) - min(spad_means)
+
+        # Calculate per-spad standard deviation
+        spad_stddevs = []
+        for i_spad, (spad_distances, spad_mean) in enumerate(zip(all_distances, spad_means)):
+            spad_stddevs.append(sqrt(sum([(d - spad_mean) ** 2 for d in spad_distances]) / len(spad_distances)))
+
+        global_stddev = sum(spad_stddevs) / len(spad_stddevs)
         if DEBUG:
-            print(f'Distance: {mean_distance:.2f} with std = {stddev}')
-        return mean_distance, stddev
+            print(f'Distance: {global_distance:.2f} with std = {global_stddev} and roughness = {global_roughness}')
+        return global_distance, global_stddev, global_roughness
     except Exception:
-        return None, None
+        return None, None, None
 
 
 def draw_texts(group, font_normal, font_bold, ext_temp, ext_humidity, board_temp, board_humidity, growth_percentage,
@@ -404,7 +418,7 @@ try:
         time.sleep(DEBUG_DELAY)
 
     # Read time-of-flight distance from TMF8821 sensor
-    current_distance, distance_std = read_distance(i2c)
+    current_distance, distance_std, roughness = read_distance(i2c)
 
     # Handle distance and calibrations
     growth_percentage = None
@@ -552,6 +566,7 @@ try:
             influxdb_row = f"{INFLUXDB_MEASUREMENT},device={DEVICE_NAME} " + \
                            (f"height={growth_percentage:.2f}," if growth_percentage is not None else "") + \
                            (f"height_std={growth_perc_std:.2f}," if growth_perc_std is not None else "") + \
+                           (f"roughness={roughness:.2f}," if roughness is not None else "") + \
                            (f"floor_calib={floor_distance:.2f}," if floor_distance is not None else "") + \
                            (f"start_calib={start_height:.2f}," if start_height is not None else "") + \
                            (f"temp_in={ext_temp:.2f}," if ext_temp is not None else "") + \
