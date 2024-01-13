@@ -577,7 +577,7 @@ try:
                            (f"hum_in={ext_humidity:.2f}," if ext_humidity is not None else "") + \
                            f"hum_out={board_humidity:.2f}," + \
                            f"wifi_rssi={wifi_connectivity:d}," + \
-                           f"wifi_ssid={ssid}," + \
+                           f"wifi_ssid=\"{ssid}\"," + \
                            f"wake_reason=\"{wake_reason}\"," + \
                            f"battery_level={battery_percentage:.2f}"
 
