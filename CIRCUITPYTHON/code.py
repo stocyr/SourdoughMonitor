@@ -33,7 +33,6 @@ from adafruit_lc709203f import LC709203F
 import adafruit_il0373
 import adafruit_am2320
 from adafruit_bitmap_font import bitmap_font
-import ipaddress
 import wifi
 import socketpool
 import ssl
@@ -253,7 +252,6 @@ def log_data_to_sd_card(floor_calib: int, start_calib: int, temp_buffer: CyclicB
 
 
 def log_exception_to_sd_card(exc):
-    import os
     import traceback
     import sdcardio
     import storage
