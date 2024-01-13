@@ -616,7 +616,7 @@ try:
 
     battery_symbol = BatteryWidget(x=257, y=4, width=10, height=19, upper_part_height=2, upper_part_width=4,
                                    background_color=PaletteColor.light_gray, fill_color=PaletteColor.black,
-                                   exclamation_mark_threshold=0.038)
+                                   exclamation_mark_threshold=0.0)
     battery_symbol.draw(battery_percentage / 100)
     if battery_symbol.critical_battery and message_lines['am2320'][0] == '':
         message_lines['am2320'] = (' Low battery ', True)
