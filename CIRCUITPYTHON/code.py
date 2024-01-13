@@ -287,7 +287,8 @@ def log_exception_to_sd_card(exc):
     return exc_string
 
 
-def connect_to_wifi():
+def connect_to_wifi() -> str:
+    return_ssid = None
     global wifi_connectivity, wifi_chan_mem
     # Construct indices of Wi-Fi configurations such that the previously working one is at the front
     if len(WIFI_AUTH) > wifi_idx_mem.value:
@@ -303,6 +304,7 @@ def connect_to_wifi():
                 # Potentially update working Wi-Fi configuration to persistent memory
                 wifi_chan_mem.value = wifi.radio.ap_info.channel
                 wifi_idx_mem.value = ind
+                return_ssid = ssid
                 break
         except ConnectionError as e:
             # Cannot connect
@@ -312,6 +314,7 @@ def connect_to_wifi():
         # Didn't find any working Wi-Fi key pair
         if DEBUG:
             print(f'None of the {len(WIFI_AUTH)} Wi-Fi configuration(s) is working!')
+    return return_ssid
 
 
 # ===================== MAIN CODE =======================
@@ -549,7 +552,7 @@ try:
     telemetry_success = False
     if TELEMETRY:
         wifi.radio.enabled = True
-        connect_to_wifi()
+        ssid = connect_to_wifi()
 
         if wifi_connectivity is not None:
             # Prepare requests library
@@ -574,6 +577,7 @@ try:
                            (f"hum_in={ext_humidity:.2f}," if ext_humidity is not None else "") + \
                            f"hum_out={board_humidity:.2f}," + \
                            f"wifi_rssi={wifi_connectivity:d}," + \
+                           f"wifi_ssid={ssid}," + \
                            f"wake_reason=\"{wake_reason}\"," + \
                            f"battery_level={battery_percentage:.2f}"
 
