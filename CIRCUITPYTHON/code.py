@@ -10,7 +10,7 @@ i2c_power.switch_to_input()
 
 # ===================== CONSTANTS =======================
 BOOT_TIME = 1.3  # second
-GRAPH_WIDTH = 261  # pixel
+GRAPH_WIDTH = 256  # pixel
 DEBUG = False
 DEBUG_DELAY = 0.0
 FRIDGE_SLEEP_TIME_FACTOR = 3
@@ -164,6 +164,7 @@ def read_distance(i2c_device: busio.I2C, oversampling: int = 5) -> tuple[float, 
         for measurement_repetition in range(oversampling):
             measurement = tof.wait_for_measurement(timeout_ms=500)
             all_distances.extend(measurement.distances)
+        TODO: point-wise variance and surface_roughness?
         tof.stop_measurements()
         mean_distance = sum(all_distances) / len(all_distances)
         stddev = sqrt(sum([(d - mean_distance) ** 2 for d in all_distances]) / len(all_distances))
