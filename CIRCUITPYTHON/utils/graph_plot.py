@@ -41,7 +41,7 @@ class GraphPlot(Widget):
                  background_color: int = PaletteColor.transparent,
                  ygrid_color: int = None,
                  font_size: tuple = None,
-                 alignment: str = 'fit',
+                 alignment: str = 'right',
                  dry: bool = False,
                  **kwargs):
         super().__init__(**kwargs)
