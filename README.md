@@ -13,6 +13,8 @@ _This work is licensed under a
 ![collage](doc/collage.jpg)
 
 
+![collage](telemetry/grafana_printscreen.png)
+
 Setup
 -----
 
@@ -160,6 +162,12 @@ In the same file as the Wi-Fi configurations, [`CIRCUITPYTHON/metric_telemetry/s
 A template file can be found at [`CIRCUITPYTHON/metric_telemetry/secrets_template.py`](CIRCUITPYTHON/metric_telemetry/secrets_template.py).
 
 Then also adjust the measurement's name (`INFLUXDB_MEASUREMENT`) and the device's name (`DEVICE_NAME`) in [`CIRCUITPYTHON/code.py`](CIRCUITPYTHON/code.py).
+
+Note that the free InfluxDB Cloud tier is enough to get started, the only relevant limitation is a data retention period of maximum 30 days.
+
+#### Visualization in Grafana
+
+The metrics can be visualized by e.g. [Grafana](https://grafana.com/products/cloud/metrics/). An example dashboard is visualized above and the according JSON model can be found in [`telemetry/grafana_dashboard_model.json`](telemetry/grafana_dashboard_model.json) using a free Grafana cloud setup.
 
 ### Trouble Shooting
 
